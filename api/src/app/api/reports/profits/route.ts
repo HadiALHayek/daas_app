@@ -5,7 +5,6 @@ import { getAdminClient } from "@/lib/supabase";
 interface BillRow {
   id: string;
   currency: string;
-  usd_to_syp_rate: number;
   created_at: string;
   bill_items: Array<{ total_sell: number }>;
 }
@@ -16,35 +15,56 @@ interface ExpenseRow {
   payment_date: string;
 }
 
-function toSyp(amount: number, currency: string, rate: number): number {
-  if (currency === "SYP") return amount;
-  return amount * rate;
+interface CurrencyTotals {
+  incoming: number;
+  outgoing: number;
+  profit: number;
 }
 
-function aggregateBills(bills: BillRow[]) {
-  let incoming = 0;
+function currencyKey(currency: string): "SYP" | "USD" {
+  return currency === "USD" ? "USD" : "SYP";
+}
+
+function sumBillSales(bills: BillRow[]) {
+  const incoming = { SYP: 0, USD: 0 };
 
   for (const bill of bills) {
-    const rate = Number(bill.usd_to_syp_rate);
+    const key = currencyKey(bill.currency);
     for (const item of bill.bill_items ?? []) {
-      incoming += toSyp(Number(item.total_sell), bill.currency, rate);
+      incoming[key] += Number(item.total_sell);
     }
   }
 
-  return { incoming, bill_count: bills.length };
+  return incoming;
 }
 
-function aggregateExpenses(
-  expenses: ExpenseRow[],
-  defaultRate: number
-) {
-  let outgoing = 0;
+function sumExpenses(expenses: ExpenseRow[]) {
+  const outgoing = { SYP: 0, USD: 0 };
 
   for (const expense of expenses) {
-    outgoing += toSyp(Number(expense.amount), expense.currency, defaultRate);
+    const key = currencyKey(expense.currency);
+    outgoing[key] += Number(expense.amount);
   }
 
   return outgoing;
+}
+
+function buildCurrencyTotals(
+  incoming: { SYP: number; USD: number },
+  outgoing: { SYP: number; USD: number }
+): { syp: CurrencyTotals; usd: CurrencyTotals } {
+  return {
+    syp: {
+      incoming: incoming.SYP,
+      outgoing: outgoing.SYP,
+      profit: incoming.SYP - outgoing.SYP,
+    },
+    usd: {
+      incoming: incoming.USD,
+      outgoing: outgoing.USD,
+      profit: incoming.USD - outgoing.USD,
+    },
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -67,14 +87,6 @@ export async function GET(request: NextRequest) {
 
     const supabase = getAdminClient();
 
-    const { data: settings } = await supabase
-      .from("settings")
-      .select("usd_to_syp")
-      .eq("id", 1)
-      .maybeSingle();
-
-    const defaultRate = Number(settings?.usd_to_syp ?? 15000);
-
     const startDate =
       period === "monthly"
         ? new Date(year, month - 1, 1)
@@ -94,7 +106,6 @@ export async function GET(request: NextRequest) {
           `
           id,
           currency,
-          usd_to_syp_rate,
           created_at,
           bill_items ( total_sell )
         `
@@ -114,16 +125,15 @@ export async function GET(request: NextRequest) {
     const bills = (billsResult.data ?? []) as BillRow[];
     const expenses = (expensesResult.data ?? []) as ExpenseRow[];
 
-    const billTotals = aggregateBills(bills);
-    const outgoing = aggregateExpenses(expenses, defaultRate);
-    const incoming = billTotals.incoming;
-    const profit = incoming - outgoing;
+    const totals = buildCurrencyTotals(
+      sumBillSales(bills),
+      sumExpenses(expenses)
+    );
 
     const breakdown: Array<{
       month: number;
-      incoming: number;
-      outgoing: number;
-      profit: number;
+      syp: CurrencyTotals;
+      usd: CurrencyTotals;
       bill_count: number;
     }> = [];
 
@@ -139,15 +149,14 @@ export async function GET(request: NextRequest) {
           const d = new Date(e.payment_date);
           return d >= mStart && d < mEnd;
         });
-        const monthBillTotals = aggregateBills(monthBills);
-        const monthOutgoing = aggregateExpenses(monthExpenses, defaultRate);
-        const monthIncoming = monthBillTotals.incoming;
+        const monthTotals = buildCurrencyTotals(
+          sumBillSales(monthBills),
+          sumExpenses(monthExpenses)
+        );
         breakdown.push({
           month: m,
-          incoming: monthIncoming,
-          outgoing: monthOutgoing,
-          profit: monthIncoming - monthOutgoing,
-          bill_count: monthBillTotals.bill_count,
+          ...monthTotals,
+          bill_count: monthBills.length,
         });
       }
     }
@@ -156,11 +165,8 @@ export async function GET(request: NextRequest) {
       period,
       year,
       month: period === "monthly" ? month : undefined,
-      currency: "SYP",
-      incoming,
-      outgoing,
-      profit,
-      bill_count: billTotals.bill_count,
+      ...totals,
+      bill_count: bills.length,
       breakdown,
     });
   } catch (e) {
