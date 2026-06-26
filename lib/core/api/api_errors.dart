@@ -14,6 +14,7 @@ String extractApiError(DioException e) {
 
   final status = e.response?.statusCode;
   if (status == 401) return 'انتهت الجلسة. سجّل الدخول مرة أخرى.';
+  if (status == 404) return 'غير موجود على الخادم';
   if (status == 400) return 'بيانات غير صالحة';
   if (status != null) return 'خطأ من الخادم ($status)';
 

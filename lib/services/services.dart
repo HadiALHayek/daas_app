@@ -124,7 +124,8 @@ class CustomersService {
   Future<Customer> updateCustomer(String id, Customer customer) async {
     try {
       final response = await _client.dio.put(
-        '/api/customers/$id',
+        '/api/customers',
+        queryParameters: {'id': id},
         data: customer.toJson(),
       );
       return Customer.fromJson(response.data as Map<String, dynamic>);
@@ -135,7 +136,10 @@ class CustomersService {
 
   Future<void> deleteCustomer(String id) async {
     try {
-      await _client.dio.delete('/api/customers/$id');
+      await _client.dio.delete(
+        '/api/customers',
+        queryParameters: {'id': id},
+      );
     } on DioException catch (e) {
       throw Exception(extractApiError(e));
     }
