@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/strings_ar.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_widgets.dart';
 import '../../services/services.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -11,90 +14,117 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(StringsAr.dashboard),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: StringsAr.logout,
-            onPressed: () async {
-              await ref.read(authServiceProvider).logout();
-              if (context.mounted) context.go('/login');
-            },
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: GridView.count(
-          crossAxisCount: 2,
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
-          children: [
-            _DashboardCard(
-              icon: Icons.inventory_2_outlined,
-              label: StringsAr.manageItems,
-              onTap: () => context.push('/items'),
+      backgroundColor: AppColors.surface,
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 160,
+            pinned: true,
+            backgroundColor: AppColors.primary,
+            flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsetsDirectional.only(start: 20, bottom: 16),
+              title: Text(
+                StringsAr.dashboard,
+                style: GoogleFonts.cairo(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                ),
+              ),
+              background: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft,
+                    colors: [AppColors.primary, AppColors.primaryLight],
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: -30,
+                      top: -20,
+                      child: Icon(
+                        Icons.chair_alt_rounded,
+                        size: 140,
+                        color: Colors.white.withValues(alpha: 0.06),
+                      ),
+                    ),
+                    Positioned(
+                      right: 20,
+                      bottom: 56,
+                      left: 20,
+                      child: Text(
+                        'مرحباً بك في لوحة التحكم',
+                        style: GoogleFonts.cairo(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            _DashboardCard(
-              icon: Icons.currency_exchange,
-              label: StringsAr.exchangeRate,
-              onTap: () => context.push('/exchange-rate'),
-            ),
-            _DashboardCard(
-              icon: Icons.people_outline,
-              label: StringsAr.customers,
-              onTap: () => context.push('/customers'),
-            ),
-            _DashboardCard(
-              icon: Icons.receipt_long_outlined,
-              label: StringsAr.newBill,
-              onTap: () => context.push('/bills/new'),
-            ),
-            _DashboardCard(
-              icon: Icons.bar_chart_outlined,
-              label: StringsAr.profits,
-              onTap: () => context.push('/profits'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DashboardCard extends StatelessWidget {
-  const _DashboardCard({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(height: 12),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.logout_rounded),
+                tooltip: StringsAr.logout,
+                onPressed: () async {
+                  await ref.read(authServiceProvider).logout();
+                  if (context.mounted) context.go('/login');
+                },
               ),
             ],
           ),
-        ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
+                childAspectRatio: 0.92,
+              ),
+              delegate: SliverChildListDelegate([
+                DashboardTile(
+                  icon: Icons.inventory_2_rounded,
+                  label: StringsAr.manageItems,
+                  subtitle: 'الكتالوج والأسعار',
+                  color: AppColors.dashboardTiles[0],
+                  onTap: () => context.push('/items'),
+                ),
+                DashboardTile(
+                  icon: Icons.currency_exchange_rounded,
+                  label: StringsAr.exchangeRate,
+                  subtitle: 'دولار / ليرة',
+                  color: AppColors.dashboardTiles[1],
+                  onTap: () => context.push('/exchange-rate'),
+                ),
+                DashboardTile(
+                  icon: Icons.people_alt_rounded,
+                  label: StringsAr.customers,
+                  subtitle: 'دفاتر الفواتير',
+                  color: AppColors.dashboardTiles[2],
+                  onTap: () => context.push('/customers'),
+                ),
+                DashboardTile(
+                  icon: Icons.receipt_long_rounded,
+                  label: StringsAr.newBill,
+                  subtitle: 'إنشاء وطباعة',
+                  color: AppColors.dashboardTiles[3],
+                  onTap: () => context.push('/bills/new'),
+                ),
+                DashboardTile(
+                  icon: Icons.insights_rounded,
+                  label: StringsAr.profits,
+                  subtitle: 'تقارير الأرباح',
+                  color: AppColors.dashboardTiles[4],
+                  onTap: () => context.push('/profits'),
+                ),
+              ]),
+            ),
+          ),
+        ],
       ),
     );
   }

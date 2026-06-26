@@ -24,6 +24,6 @@ class Customer {
 
   Map<String, dynamic> toJson() => {
         'name': name,
-        if (phone != null) 'phone': phone,
+        'phone': phone,
       };
 }

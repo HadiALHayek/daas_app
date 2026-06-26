@@ -1,6 +1,4 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -10,6 +8,43 @@ import '../core/constants/strings_ar.dart';
 import '../models/bill.dart';
 
 class PdfService {
+  pw.Font? _regular;
+  pw.Font? _bold;
+
+  bool _isValidTtf(ByteData data) {
+    if (data.lengthInBytes < 4) return false;
+    final b0 = data.getUint8(0);
+    final b1 = data.getUint8(1);
+    final b2 = data.getUint8(2);
+    final b3 = data.getUint8(3);
+    // TrueType outline fonts start with 0x00010000
+    if (b0 == 0x00 && b1 == 0x01 && b2 == 0x00 && b3 == 0x00) return true;
+    // OpenType with CFF outlines: "OTTO"
+    if (b0 == 0x4F && b1 == 0x54 && b2 == 0x54 && b3 == 0x4F) return true;
+    return false;
+  }
+
+  Future<pw.Font> _loadBundledFont(String assetPath) async {
+    final data = await rootBundle.load(assetPath);
+    if (!_isValidTtf(data)) {
+      throw const FormatException('Invalid TTF font asset');
+    }
+    return pw.Font.ttf(data);
+  }
+
+  Future<void> _ensureFonts() async {
+    if (_regular != null && _bold != null) return;
+
+    try {
+      _regular = await _loadBundledFont('assets/fonts/Cairo-Regular.ttf');
+      _bold = await _loadBundledFont('assets/fonts/Cairo-Bold.ttf');
+    } catch (_) {
+      // Bundled fonts missing or corrupt — download from Google Fonts
+      _regular = await PdfGoogleFonts.cairoRegular();
+      _bold = await PdfGoogleFonts.cairoBold();
+    }
+  }
+
   Future<void> printBill(Bill bill) async {
     final doc = await _buildDocument(bill);
     await Printing.layoutPdf(onLayout: (_) async => doc.save());
@@ -24,29 +59,24 @@ class PdfService {
   }
 
   Future<pw.Document> _buildDocument(Bill bill) async {
+    await _ensureFonts();
+    final arabicRegular = _regular!;
+    final arabicBold = _bold!;
+
     final dateFormat = DateFormat('yyyy/MM/dd', 'ar');
     final numberFormat = NumberFormat('#,##0.##', 'ar');
-
-    Uint8List? signatureBytes;
-    try {
-      final raw = bill.sellerSignature;
-      if (raw.startsWith('data:image')) {
-        final base64Str = raw.split(',').last;
-        signatureBytes = base64Decode(base64Str);
-      } else if (raw.isNotEmpty) {
-        signatureBytes = base64Decode(raw);
-      }
-    } catch (_) {
-      signatureBytes = null;
-    }
-
     final currency = bill.currencyLabel;
+
+    final baseStyle = pw.TextStyle(font: arabicRegular);
+    final boldStyle = pw.TextStyle(font: arabicBold, fontWeight: pw.FontWeight.bold);
 
     final doc = pw.Document();
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
         textDirection: pw.TextDirection.rtl,
+        margin: const pw.EdgeInsets.all(40),
+        theme: pw.ThemeData.withFont(base: arabicRegular, bold: arabicBold),
         build: (context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
@@ -54,28 +84,30 @@ class PdfService {
               pw.Center(
                 child: pw.Text(
                   StringsAr.factoryName,
-                  style: pw.TextStyle(
-                    fontSize: 22,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
+                  style: boldStyle.copyWith(fontSize: 22),
                 ),
               ),
               pw.SizedBox(height: 16),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('${StringsAr.billNumber}: #${bill.billNumber}'),
+                  pw.Text(
+                    '${StringsAr.billNumber}: #${bill.billNumber}',
+                    style: baseStyle,
+                  ),
                   pw.Text(
                     '${StringsAr.date}: ${dateFormat.format(bill.createdAt)}',
+                    style: baseStyle,
                   ),
                 ],
               ),
               pw.SizedBox(height: 8),
               pw.Text(
                 '${StringsAr.customerName}: ${bill.customerName ?? ''}',
+                style: baseStyle,
               ),
               pw.SizedBox(height: 20),
-              pw.Table.fromTextArray(
+              pw.TableHelper.fromTextArray(
                 headers: [
                   StringsAr.itemName,
                   StringsAr.quantity,
@@ -92,41 +124,25 @@ class PdfService {
                       ],
                     )
                     .toList(),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headerStyle: boldStyle,
+                cellStyle: baseStyle,
+                headerAlignment: pw.Alignment.centerRight,
                 cellAlignment: pw.Alignment.centerRight,
                 headerDecoration: const pw.BoxDecoration(
                   color: PdfColors.grey300,
                 ),
-                cellHeight: 30,
+                cellHeight: 32,
               ),
               pw.SizedBox(height: 16),
               pw.Align(
                 alignment: pw.Alignment.centerLeft,
                 child: pw.Text(
                   '${StringsAr.total}: ${numberFormat.format(bill.total)} $currency',
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
+                  style: boldStyle.copyWith(fontSize: 16),
                 ),
               ),
               pw.Spacer(),
-              pw.Text(StringsAr.sellerSignature),
-              pw.SizedBox(height: 8),
-              if (signatureBytes != null)
-                pw.Image(
-                  pw.MemoryImage(signatureBytes),
-                  width: 200,
-                  height: 80,
-                )
-              else
-                pw.Container(
-                  width: 200,
-                  height: 80,
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey),
-                  ),
-                ),
+              _signaturePlaceholder(baseStyle, boldStyle),
             ],
           );
         },
@@ -134,6 +150,43 @@ class PdfService {
     );
 
     return doc;
+  }
+
+  pw.Widget _signaturePlaceholder(
+    pw.TextStyle baseStyle,
+    pw.TextStyle boldStyle,
+  ) {
+    return pw.Align(
+      alignment: pw.Alignment.centerRight,
+      child: pw.SizedBox(
+        width: 240,
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              StringsAr.sellerSignature,
+              style: boldStyle.copyWith(fontSize: 13),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Container(
+              width: 240,
+              height: 72,
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey700, width: 1),
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              StringsAr.signHere,
+              style: baseStyle.copyWith(
+                fontSize: 10,
+                color: PdfColors.grey600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

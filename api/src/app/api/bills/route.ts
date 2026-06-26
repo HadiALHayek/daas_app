@@ -18,15 +18,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { customer_id, currency, seller_signature, items } = body as {
-      customer_id: string;
-      currency: string;
-      seller_signature: string;
-      items: BillLineInput[];
-    };
+    const customer_id = body?.customer_id ?? body?.customerId;
+    const currency = body?.currency;
+    const seller_signature = body?.seller_signature ?? body?.sellerSignature ?? "";
+    const items = body?.items;
 
-    if (!customer_id || !currency || !seller_signature || !items?.length) {
-      return Response.json({ error: "بيانات الفاتورة غير مكتملة" }, { status: 400 });
+    if (!customer_id) {
+      return Response.json({ error: "العميل مطلوب" }, { status: 400 });
+    }
+    if (!currency) {
+      return Response.json({ error: "العملة مطلوبة" }, { status: 400 });
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      return Response.json({ error: "أضف صنفاً واحداً على الأقل" }, { status: 400 });
     }
 
     if (!["SYP", "USD"].includes(currency)) {
@@ -35,18 +39,26 @@ export async function POST(request: NextRequest) {
 
     const supabase = getAdminClient();
 
+    let rate = 15000;
     const { data: settings, error: settingsError } = await supabase
       .from("settings")
       .select("usd_to_syp")
       .eq("id", 1)
-      .single();
+      .maybeSingle();
 
     if (settingsError) return serverError(settingsError.message);
 
-    const rate = Number(settings.usd_to_syp);
+    if (settings) {
+      rate = Number(settings.usd_to_syp);
+    } else {
+      const { error: seedError } = await supabase
+        .from("settings")
+        .upsert({ id: 1, usd_to_syp: rate });
+      if (seedError) return serverError(seedError.message);
+    }
     const processedItems = [];
 
-    for (const line of items) {
+    for (const line of items as BillLineInput[]) {
       let unitSell = Number(line.unit_sell_price ?? 0);
       let unitCost = Number(line.unit_item_cost ?? 0);
       const itemCurrency = line.item_currency ?? currency;
@@ -102,7 +114,7 @@ export async function POST(request: NextRequest) {
         usd_to_syp_rate: rate,
         subtotal,
         total,
-        seller_signature,
+        seller_signature: seller_signature ?? '',
       })
       .select(
         `

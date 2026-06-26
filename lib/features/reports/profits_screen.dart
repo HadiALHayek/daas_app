@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/strings_ar.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_widgets.dart';
 import '../../models/profit_report.dart';
 import '../../services/services.dart';
 
@@ -23,18 +26,8 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
   final _numberFormat = NumberFormat('#,##0', 'ar');
 
   static const _monthNames = [
-    'يناير',
-    'فبراير',
-    'مارس',
-    'أبريل',
-    'مايو',
-    'يونيو',
-    'يوليو',
-    'أغسطس',
-    'سبتمبر',
-    'أكتوبر',
-    'نوفمبر',
-    'ديسمبر',
+    'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
   ];
 
   @override
@@ -65,79 +58,91 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text(StringsAr.profits)),
+    return AppScaffold(
+      title: StringsAr.profits,
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'monthly', label: Text(StringsAr.monthly)),
-                    ButtonSegment(value: 'yearly', label: Text(StringsAr.yearly)),
-                  ],
-                  selected: {_period},
-                  onSelectionChanged: (values) {
-                    setState(() => _period = values.first);
-                    _load();
-                  },
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<int>(
-                        value: _year,
-                        decoration: const InputDecoration(labelText: StringsAr.year),
-                        items: List.generate(5, (i) {
-                          final year = DateTime.now().year - i;
-                          return DropdownMenuItem(
-                            value: year,
-                            child: Text(year.toString()),
-                          );
-                        }),
-                        onChanged: (v) {
-                          if (v != null) {
-                            setState(() => _year = v);
-                            _load();
-                          }
-                        },
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: SectionCard(
+              child: Column(
+                children: [
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'monthly',
+                        label: Text(StringsAr.monthly),
+                        icon: Icon(Icons.calendar_month_rounded, size: 18),
                       ),
-                    ),
-                    if (_period == 'monthly') ...[
-                      const SizedBox(width: 16),
+                      ButtonSegment(
+                        value: 'yearly',
+                        label: Text(StringsAr.yearly),
+                        icon: Icon(Icons.calendar_today_rounded, size: 18),
+                      ),
+                    ],
+                    selected: {_period},
+                    onSelectionChanged: (values) {
+                      setState(() => _period = values.first);
+                      _load();
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
                       Expanded(
                         child: DropdownButtonFormField<int>(
-                          value: _month,
-                          decoration:
-                              const InputDecoration(labelText: StringsAr.month),
-                          items: List.generate(12, (i) {
+                          initialValue: _year,
+                          decoration: const InputDecoration(labelText: StringsAr.year),
+                          items: List.generate(5, (i) {
+                            final year = DateTime.now().year - i;
                             return DropdownMenuItem(
-                              value: i + 1,
-                              child: Text(_monthNames[i]),
+                              value: year,
+                              child: Text(year.toString()),
                             );
                           }),
                           onChanged: (v) {
                             if (v != null) {
-                              setState(() => _month = v);
+                              setState(() => _year = v);
                               _load();
                             }
                           },
                         ),
                       ),
+                      if (_period == 'monthly') ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            initialValue: _month,
+                            decoration: const InputDecoration(labelText: StringsAr.month),
+                            items: List.generate(12, (i) {
+                              return DropdownMenuItem(
+                                value: i + 1,
+                                child: Text(_monthNames[i]),
+                              );
+                            }),
+                            onChanged: (v) {
+                              if (v != null) {
+                                setState(() => _month = v);
+                                _load();
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoading()
                 : _report == null
-                    ? const Center(child: Text(StringsAr.noData))
+                    ? const EmptyState(
+                        icon: Icons.bar_chart_rounded,
+                        title: StringsAr.noData,
+                      )
                     : _buildReport(_report!),
           ),
         ],
@@ -147,86 +152,69 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
 
   Widget _buildReport(ProfitReport report) {
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
       children: [
-        _SummaryCard(
+        StatMetricCard(
           title: StringsAr.incoming,
           value: '${_numberFormat.format(report.incoming)} ${StringsAr.syp}',
-          color: Colors.green.shade700,
+          icon: Icons.trending_up_rounded,
+          color: AppColors.success,
+          backgroundColor: AppColors.successSoft,
         ),
         const SizedBox(height: 12),
-        _SummaryCard(
+        StatMetricCard(
           title: StringsAr.outgoing,
           value: '${_numberFormat.format(report.outgoing)} ${StringsAr.syp}',
-          color: Colors.red.shade700,
+          icon: Icons.trending_down_rounded,
+          color: AppColors.error,
+          backgroundColor: AppColors.errorSoft,
         ),
         const SizedBox(height: 12),
-        _SummaryCard(
+        StatMetricCard(
           title: StringsAr.profit,
           value: '${_numberFormat.format(report.profit)} ${StringsAr.syp}',
-          color: Colors.blue.shade700,
+          icon: Icons.account_balance_wallet_rounded,
+          color: AppColors.info,
         ),
         const SizedBox(height: 12),
-        Card(
-          child: ListTile(
-            title: const Text(StringsAr.billCount),
-            trailing: Text(
-              report.billCount.toString(),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
+        StatMetricCard(
+          title: StringsAr.billCount,
+          value: report.billCount.toString(),
+          icon: Icons.receipt_rounded,
+          color: AppColors.primary,
         ),
         if (report.period == 'yearly' && report.breakdown.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text(
             'التفصيل الشهري',
-            style: Theme.of(context).textTheme.titleMedium,
+            style: GoogleFonts.cairo(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           ...report.breakdown.map((row) {
             if (row.billCount == 0) return const SizedBox.shrink();
-            return Card(
-              child: ListTile(
-                title: Text(_monthNames[row.month - 1]),
-                subtitle: Text(
-                  '${StringsAr.incoming}: ${_numberFormat.format(row.incoming)} | '
-                  '${StringsAr.profit}: ${_numberFormat.format(row.profit)}',
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ListItemCard(
+                title: _monthNames[row.month - 1],
+                subtitle:
+                    '${StringsAr.incoming}: ${_numberFormat.format(row.incoming)}  •  '
+                    '${StringsAr.profit}: ${_numberFormat.format(row.profit)}',
+                trailing: Text(
+                  '${row.billCount} فاتورة',
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
                 ),
-                trailing: Text('${row.billCount} فاتورة'),
               ),
             );
           }),
         ],
       ],
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.title,
-    required this.value,
-    required this.color,
-  });
-
-  final String title;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(value, style: Theme.of(context).textTheme.headlineSmall),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -20,10 +20,14 @@ export async function POST(request: NextRequest) {
     });
 
     if (error || !data.session) {
-      return Response.json(
-        { error: "بيانات الدخول غير صحيحة" },
-        { status: 401 }
-      );
+      const message =
+        error?.message === "Email not confirmed"
+          ? "البريد الإلكتروني غير مفعّل. فعّل المستخدم من لوحة Supabase أو أوقف تأكيد البريد."
+          : error?.message === "Invalid login credentials"
+            ? "البريد الإلكتروني أو كلمة المرور غير صحيحة"
+            : error?.message ?? "بيانات الدخول غير صحيحة";
+
+      return Response.json({ error: message }, { status: 401 });
     }
 
     return Response.json({

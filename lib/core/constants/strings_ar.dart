@@ -30,6 +30,7 @@ class StringsAr {
   static const unitCost = 'تكلفة الوحدة';
   static const itemName = 'اسم الصنف';
   static const sellerSignature = 'توقيع البائع';
+  static const signHere = 'وقّع هنا بعد الطباعة';
   static const print = 'طباعة';
   static const share = 'مشاركة';
   static const selectCustomer = 'اختر العميل';
@@ -55,6 +56,7 @@ class StringsAr {
   static const billDetails = 'تفاصيل الفاتورة';
   static const reprint = 'إعادة طباعة';
   static const addCustomer = 'إضافة عميل';
+  static const editCustomer = 'تعديل العميل';
   static const selectItem = 'اختر صنفاً';
   static const subtotal = 'المجموع الفرعي';
 }

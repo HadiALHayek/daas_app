@@ -72,7 +72,7 @@ class Bill {
     final customer = json['customers'];
     return Bill(
       id: json['id'] as String,
-      billNumber: json['bill_number'] as int,
+      billNumber: (json['bill_number'] as num).toInt(),
       currency: json['currency'] as String,
       usdToSypRate: (json['usd_to_syp_rate'] as num).toDouble(),
       subtotal: (json['subtotal'] as num).toDouble(),

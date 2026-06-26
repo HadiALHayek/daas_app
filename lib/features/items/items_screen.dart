@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/constants/strings_ar.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_widgets.dart';
 import '../../models/item.dart';
 import '../../services/services.dart';
 
@@ -17,6 +20,8 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   List<CatalogItem>? _items;
   bool _loading = true;
   String? _error;
+
+  final _priceFormat = NumberFormat('#,##0.##', 'ar');
 
   @override
   void initState() {
@@ -43,13 +48,15 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text(StringsAr.confirmDelete),
+        title: Text(StringsAr.confirmDelete, style: const TextStyle(fontWeight: FontWeight.w700)),
+        content: Text('حذف "${item.name}"؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text(StringsAr.cancel),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.pop(context, true),
             child: const Text(StringsAr.delete),
           ),
@@ -65,59 +72,72 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text(StringsAr.manageItems)),
-      floatingActionButton: FloatingActionButton(
+    return AppScaffold(
+      title: StringsAr.manageItems,
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await context.push('/items/new');
           _load();
         },
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text(StringsAr.add),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoading(message: StringsAr.loading)
           : _error != null
-              ? Center(child: Text(_error!))
+              ? EmptyState(
+                  icon: Icons.error_outline,
+                  title: _error!,
+                  action: FilledButton(
+                    onPressed: _load,
+                    child: const Text('إعادة المحاولة'),
+                  ),
+                )
               : _items == null || _items!.isEmpty
-                  ? const Center(child: Text(StringsAr.noData))
+                  ? EmptyState(
+                      icon: Icons.inventory_2_outlined,
+                      title: StringsAr.noData,
+                      subtitle: 'أضف أصناف الأثاث لاستخدامها في الفواتير',
+                      action: FilledButton.icon(
+                        onPressed: () async {
+                          await context.push('/items/new');
+                          _load();
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text(StringsAr.add),
+                      ),
+                    )
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.separated(
                         padding: const EdgeInsets.all(16),
                         itemCount: _items!.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final item = _items![index];
-                          final currency =
-                              item.currency == 'SYP' ? StringsAr.syp : StringsAr.usd;
-                          return Card(
-                            child: ListTile(
-                              title: Text(item.name),
-                              subtitle: Text(
-                                '${StringsAr.cost}: ${item.cost} $currency | '
-                                '${StringsAr.sellPrice}: ${item.sellPrice} $currency',
+                          return ListItemCard(
+                            leading: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              trailing: PopupMenuButton<String>(
-                                onSelected: (value) async {
-                                  if (value == 'edit') {
-                                    await context.push('/items/${item.id}/edit');
-                                    _load();
-                                  } else if (value == 'delete') {
-                                    await _deleteItem(item);
-                                  }
-                                },
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(
-                                    value: 'edit',
-                                    child: Text(StringsAr.edit),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'delete',
-                                    child: Text(StringsAr.delete),
-                                  ),
-                                ],
+                              child: const Icon(
+                                Icons.chair_rounded,
+                                color: AppColors.primary,
                               ),
                             ),
+                            title: item.name,
+                            subtitle:
+                                '${StringsAr.cost}: ${_priceFormat.format(item.cost)}  •  '
+                                '${StringsAr.sellPrice}: ${_priceFormat.format(item.sellPrice)}',
+                            trailing: CurrencyBadge(currency: item.currency),
+                            onEdit: () async {
+                              await context.push('/items/${item.id}/edit');
+                              _load();
+                            },
+                            onDelete: () => _deleteItem(item),
                           );
                         },
                       ),

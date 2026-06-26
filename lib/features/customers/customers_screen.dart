@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/strings_ar.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_widgets.dart';
 import '../../models/customer.dart';
 import '../../services/services.dart';
+import 'customer_form_dialog.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({super.key});
@@ -28,10 +31,16 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     try {
       final customers = await ref.read(customersServiceProvider).getCustomers();
       setState(() => _customers = customers);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(StringsAr.error)),
+          SnackBar(
+            content: Text(
+              e is Exception
+                  ? e.toString().replaceFirst('Exception: ', '')
+                  : StringsAr.error,
+            ),
+          ),
         );
       }
     } finally {
@@ -40,58 +49,100 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   }
 
   Future<void> _addCustomer() async {
-    final nameController = TextEditingController();
-    final phoneController = TextEditingController();
+    final data = await showCustomerFormDialog(context: context);
+    if (data == null) return;
 
-    final result = await showDialog<bool>(
+    try {
+      await ref.read(customersServiceProvider).createCustomer(
+            Customer(id: '', name: data.name, phone: data.phone),
+          );
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is Exception
+                  ? e.toString().replaceFirst('Exception: ', '')
+                  : StringsAr.error,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _editCustomer(Customer customer) async {
+    final data = await showCustomerFormDialog(
+      context: context,
+      customer: customer,
+    );
+    if (data == null) return;
+
+    try {
+      await ref.read(customersServiceProvider).updateCustomer(
+            customer.id,
+            Customer(id: customer.id, name: data.name, phone: data.phone),
+          );
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is Exception
+                  ? e.toString().replaceFirst('Exception: ', '')
+                  : StringsAr.error,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteCustomer(Customer customer) async {
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text(StringsAr.addCustomer),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: StringsAr.customerName),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(labelText: StringsAr.phone),
-              keyboardType: TextInputType.phone,
-            ),
-          ],
+        title: Text(
+          StringsAr.confirmDelete,
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
+        content: Text('حذف "${customer.name}"؟ سيتم حذف جميع فواتيره أيضاً.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text(StringsAr.cancel),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text(StringsAr.save),
+            child: const Text(StringsAr.delete),
           ),
         ],
       ),
     );
 
-    if (result != true || nameController.text.trim().isEmpty) return;
+    if (confirm != true) return;
 
     try {
-      await ref.read(customersServiceProvider).createCustomer(
-            Customer(
-              id: '',
-              name: nameController.text.trim(),
-              phone: phoneController.text.trim().isEmpty
-                  ? null
-                  : phoneController.text.trim(),
-            ),
-          );
+      await ref.read(customersServiceProvider).deleteCustomer(customer.id);
       _load();
-    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(StringsAr.error)),
+          const SnackBar(content: Text('تم حذف العميل')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is Exception
+                  ? e.toString().replaceFirst('Exception: ', '')
+                  : StringsAr.error,
+            ),
+          ),
         );
       }
     }
@@ -99,37 +150,56 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text(StringsAr.customers)),
-      floatingActionButton: FloatingActionButton(
+    return AppScaffold(
+      title: StringsAr.customers,
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _addCustomer,
-        child: const Icon(Icons.person_add_outlined),
+        icon: const Icon(Icons.person_add_rounded),
+        label: const Text(StringsAr.addCustomer),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoading()
           : _customers == null || _customers!.isEmpty
-              ? const Center(child: Text(StringsAr.noData))
+              ? EmptyState(
+                  icon: Icons.people_outline,
+                  title: StringsAr.noData,
+                  subtitle: 'أضف عملاء لإنشاء دفاتر الفواتير',
+                  action: FilledButton.icon(
+                    onPressed: _addCustomer,
+                    icon: const Icon(Icons.person_add),
+                    label: const Text(StringsAr.addCustomer),
+                  ),
+                )
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: _customers!.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final customer = _customers![index];
-                      return Card(
-                        child: ListTile(
-                          leading: const CircleAvatar(
-                            child: Icon(Icons.person_outline),
+                      return ListItemCard(
+                        leading: CircleAvatar(
+                          backgroundColor:
+                              AppColors.primary.withValues(alpha: 0.1),
+                          foregroundColor: AppColors.primary,
+                          child: Text(
+                            customer.name.isNotEmpty
+                                ? customer.name.characters.first
+                                : '?',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
-                          title: Text(customer.name),
-                          subtitle: customer.phone != null
-                              ? Text(customer.phone!)
-                              : null,
-                          trailing: const Icon(Icons.receipt_long_outlined),
-                          onTap: () =>
-                              context.push('/customers/${customer.id}/bills'),
                         ),
+                        title: customer.name,
+                        subtitle: customer.phone ?? 'بدون رقم هاتف',
+                        trailing: const Icon(
+                          Icons.receipt_long_rounded,
+                          color: AppColors.primary,
+                        ),
+                        onTap: () =>
+                            context.push('/customers/${customer.id}/bills'),
+                        onEdit: () => _editCustomer(customer),
+                        onDelete: () => _deleteCustomer(customer),
                       );
                     },
                   ),

@@ -1,5 +1,7 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/api_client.dart';
+import '../core/api/api_errors.dart';
 import '../models/bill.dart';
 import '../models/customer.dart';
 import '../models/item.dart';
@@ -10,12 +12,27 @@ class AuthService {
   final ApiClient _client;
 
   Future<void> login(String email, String password) async {
-    final response = await _client.dio.post('/api/auth/login', data: {
-      'email': email,
-      'password': password,
-    });
-    final token = response.data['access_token'] as String;
-    await _client.saveToken(token);
+    try {
+      final response = await _client.dio.post('/api/auth/login', data: {
+        'email': email,
+        'password': password,
+      });
+      final token = response.data['access_token'] as String;
+      await _client.saveToken(token);
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        throw Exception(
+          'تعذر الاتصال بالخادم. تأكد أن الـ API يعمل وأن عنوان API_BASE_URL صحيح.',
+        );
+      }
+      final data = e.response?.data;
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error'] as String);
+      }
+      throw Exception('بيانات الدخول غير صحيحة');
+    }
   }
 
   Future<void> logout() => _client.clearToken();
@@ -95,9 +112,33 @@ class CustomersService {
   }
 
   Future<Customer> createCustomer(Customer customer) async {
-    final response =
-        await _client.dio.post('/api/customers', data: customer.toJson());
-    return Customer.fromJson(response.data as Map<String, dynamic>);
+    try {
+      final response =
+          await _client.dio.post('/api/customers', data: customer.toJson());
+      return Customer.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<Customer> updateCustomer(String id, Customer customer) async {
+    try {
+      final response = await _client.dio.put(
+        '/api/customers/$id',
+        data: customer.toJson(),
+      );
+      return Customer.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<void> deleteCustomer(String id) async {
+    try {
+      await _client.dio.delete('/api/customers/$id');
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
   }
 
   Future<List<Bill>> getCustomerBills(String customerId) async {
@@ -120,21 +161,30 @@ class BillsService {
   Future<Bill> createBill({
     required String customerId,
     required String currency,
-    required String sellerSignature,
     required List<BillItem> items,
   }) async {
-    final response = await _client.dio.post('/api/bills', data: {
-      'customer_id': customerId,
-      'currency': currency,
-      'seller_signature': sellerSignature,
-      'items': items.map((i) => i.toCreateJson()).toList(),
-    });
-    return Bill.fromJson(response.data as Map<String, dynamic>);
+    try {
+      final payload = {
+        'customer_id': customerId,
+        'currency': currency,
+        // Non-empty so older API deployments don't reject empty signature
+        'seller_signature': 'manual',
+        'items': items.map((i) => i.toCreateJson()).toList(),
+      };
+      final response = await _client.dio.post('/api/bills', data: payload);
+      return Bill.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
   }
 
   Future<Bill> getBill(String id) async {
-    final response = await _client.dio.get('/api/bills/$id');
-    return Bill.fromJson(response.data as Map<String, dynamic>);
+    try {
+      final response = await _client.dio.get('/api/bills/$id');
+      return Bill.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
   }
 }
 

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/strings_ar.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_widgets.dart';
 import '../../models/bill.dart';
 import '../../services/pdf_service.dart';
 import '../../services/services.dart';
@@ -45,73 +48,165 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('yyyy/MM/dd HH:mm', 'ar');
+    final priceFormat = NumberFormat('#,##0.##', 'ar');
 
-    return Scaffold(
-      appBar: AppBar(title: const Text(StringsAr.billDetails)),
+    return AppScaffold(
+      title: StringsAr.billDetails,
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoading()
           : _bill == null
-              ? const Center(child: Text(StringsAr.noData))
+              ? const EmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: StringsAr.noData,
+                )
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${StringsAr.billNumber}: #${_bill!.billNumber}',
-                                style: Theme.of(context).textTheme.titleLarge,
+                      SectionCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accentSoft,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '#${_bill!.billNumber}',
+                                    style: GoogleFonts.cairo(
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.warning,
+                                    ),
+                                  ),
+                                ),
+                                const Spacer(),
+                                CurrencyBadge(currency: _bill!.currency),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            _InfoRow(
+                              icon: Icons.calendar_today_rounded,
+                              label: StringsAr.date,
+                              value: dateFormat.format(_bill!.createdAt),
+                            ),
+                            const SizedBox(height: 10),
+                            _InfoRow(
+                              icon: Icons.person_outline_rounded,
+                              label: StringsAr.customerName,
+                              value: _bill!.customerName ?? '—',
+                            ),
+                            const Divider(height: 28),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  StringsAr.total,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  '${priceFormat.format(_bill!.total)} ${_bill!.currencyLabel}',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'الأصناف',
+                        style: GoogleFonts.cairo(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ..._bill!.items.map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: ListItemCard(
+                            title: item.itemName,
+                            subtitle:
+                                '${StringsAr.quantity}: ${item.quantity}  •  '
+                                '${StringsAr.unitCost}: ${priceFormat.format(item.unitSellPrice)}',
+                            trailing: Text(
+                              '${priceFormat.format(item.totalSell)} ${_bill!.currencyLabel}',
+                              style: GoogleFonts.cairo(
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primary,
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '${StringsAr.date}: ${dateFormat.format(_bill!.createdAt)}',
-                              ),
-                              Text(
-                                '${StringsAr.customerName}: ${_bill!.customerName ?? ''}',
-                              ),
-                              Text(
-                                '${StringsAr.total}: ${_bill!.total} ${_bill!.currencyLabel}',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 16),
-                      ..._bill!.items.map(
-                        (item) => Card(
-                          child: ListTile(
-                            title: Text(item.itemName),
-                            subtitle: Text(
-                              '${StringsAr.quantity}: ${item.quantity} | '
-                              '${StringsAr.unitCost}: ${item.unitSellPrice}',
-                            ),
-                            trailing: Text(
-                              '${item.totalSell} ${_bill!.currencyLabel}',
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
                       FilledButton.icon(
                         onPressed: () => pdfService.printBill(_bill!),
-                        icon: const Icon(Icons.print),
+                        icon: const Icon(Icons.print_rounded),
                         label: const Text(StringsAr.reprint),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       OutlinedButton.icon(
                         onPressed: () => pdfService.shareBill(_bill!),
-                        icon: const Icon(Icons.share),
+                        icon: const Icon(Icons.share_rounded),
                         label: const Text(StringsAr.share),
                       ),
                     ],
                   ),
                 ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.textSecondary),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: GoogleFonts.cairo(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: GoogleFonts.cairo(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

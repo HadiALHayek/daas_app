@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/strings_ar.dart';
+import '../../core/widgets/app_widgets.dart';
+import '../../core/widgets/arabic_text_field.dart';
 import '../../models/item.dart';
 import '../../services/services.dart';
 
@@ -16,6 +18,7 @@ class ItemFormScreen extends ConsumerStatefulWidget {
 }
 
 class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _costController = TextEditingController();
   final _sellPriceController = TextEditingController();
@@ -60,24 +63,15 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   }
 
   Future<void> _save() async {
-    final name = _nameController.text.trim();
-    final cost = double.tryParse(_costController.text);
-    final sellPrice = double.tryParse(_sellPriceController.text);
-
-    if (name.isEmpty || cost == null || sellPrice == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى ملء جميع الحقول بشكل صحيح')),
-      );
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _saving = true);
 
     final item = CatalogItem(
       id: widget.itemId ?? '',
-      name: name,
-      cost: cost,
-      sellPrice: sellPrice,
+      name: _nameController.text.trim(),
+      cost: double.parse(_costController.text),
+      sellPrice: double.parse(_sellPriceController.text),
       currency: _currency,
     );
 
@@ -101,58 +95,78 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEdit ? StringsAr.edit : StringsAr.add),
-      ),
+    return AppScaffold(
+      title: _isEdit ? StringsAr.edit : StringsAr.add,
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoading()
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: StringsAr.name),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _costController,
-                    decoration: const InputDecoration(labelText: StringsAr.cost),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _sellPriceController,
-                    decoration:
-                        const InputDecoration(labelText: StringsAr.sellPrice),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _currency,
-                    decoration: const InputDecoration(labelText: StringsAr.currency),
-                    items: const [
-                      DropdownMenuItem(value: 'SYP', child: Text(StringsAr.syp)),
-                      DropdownMenuItem(value: 'USD', child: Text(StringsAr.usd)),
+              child: SectionCard(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      PageHeader(
+                        title: _isEdit ? 'تعديل الصنف' : 'صنف جديد',
+                        subtitle: 'أدخل تفاصيل التكلفة وسعر البيع',
+                      ),
+                      const SizedBox(height: 24),
+                      ArabicTextField(
+                        controller: _nameController,
+                        label: StringsAr.name,
+                        validator: (v) =>
+                            v == null || v.trim().isEmpty ? 'الاسم مطلوب' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      NumberTextField(
+                        controller: _costController,
+                        label: StringsAr.cost,
+                        validator: (v) {
+                          if (v == null || double.tryParse(v) == null) {
+                            return 'أدخل تكلفة صحيحة';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      NumberTextField(
+                        controller: _sellPriceController,
+                        label: StringsAr.sellPrice,
+                        validator: (v) {
+                          if (v == null || double.tryParse(v) == null) {
+                            return 'أدخل سعر بيع صحيح';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        initialValue: _currency,
+                        decoration: const InputDecoration(labelText: StringsAr.currency),
+                        items: const [
+                          DropdownMenuItem(value: 'SYP', child: Text(StringsAr.syp)),
+                          DropdownMenuItem(value: 'USD', child: Text(StringsAr.usd)),
+                        ],
+                        onChanged: (v) => setState(() => _currency = v ?? 'SYP'),
+                      ),
+                      const SizedBox(height: 28),
+                      FilledButton(
+                        onPressed: _saving ? null : _save,
+                        child: _saving
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(StringsAr.save),
+                      ),
                     ],
-                    onChanged: (v) => setState(() => _currency = v ?? 'SYP'),
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _saving ? null : _save,
-                      child: _saving
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text(StringsAr.save),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
     );

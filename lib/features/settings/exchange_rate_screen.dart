@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/strings_ar.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_widgets.dart';
 import '../../services/services.dart';
 
 class ExchangeRateScreen extends ConsumerStatefulWidget {
@@ -74,31 +77,76 @@ class _ExchangeRateScreenState extends ConsumerState<ExchangeRateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text(StringsAr.exchangeRate)),
+    return AppScaffold(
+      title: StringsAr.exchangeRate,
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
+          ? const AppLoading()
+          : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextField(
-                    controller: _rateController,
-                    decoration: const InputDecoration(
-                      labelText: StringsAr.usdToSyp,
-                      prefixIcon: Icon(Icons.attach_money),
+                  SectionCard(
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: AppColors.successSoft,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.currency_exchange_rounded,
+                            size: 32,
+                            color: AppColors.success,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'سعر صرف الدولار',
+                          style: GoogleFonts.cairo(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'يُستخدم لتحويل الأسعار عند إنشاء الفواتير',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.cairo(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        TextField(
+                          controller: _rateController,
+                          decoration: const InputDecoration(
+                            labelText: StringsAr.usdToSyp,
+                            prefixIcon: Icon(Icons.attach_money_rounded),
+                            suffixText: 'ل.س',
+                          ),
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.cairo(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ),
-                    keyboardType: TextInputType.number,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   FilledButton(
                     onPressed: _saving ? null : _save,
                     child: _saving
                         ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
                           )
                         : const Text(StringsAr.save),
                   ),

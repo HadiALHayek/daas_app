@@ -16,8 +16,11 @@ import '../features/reports/profits_screen.dart';
 import '../features/settings/exchange_rate_screen.dart';
 import '../services/services.dart';
 
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
+    navigatorKey: _rootNavigatorKey,
     initialLocation: '/login',
     redirect: (context, state) async {
       final isLoggedIn = await ref.read(authServiceProvider).isLoggedIn();
@@ -35,52 +38,54 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/',
         builder: (context, state) => const DashboardScreen(),
-      ),
-      GoRoute(
-        path: '/items',
-        builder: (context, state) => const ItemsScreen(),
         routes: [
           GoRoute(
-            path: 'new',
-            builder: (context, state) => const ItemFormScreen(),
+            path: 'items',
+            builder: (context, state) => const ItemsScreen(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (context, state) => const ItemFormScreen(),
+              ),
+              GoRoute(
+                path: ':id/edit',
+                builder: (context, state) => ItemFormScreen(
+                  itemId: state.pathParameters['id'],
+                ),
+              ),
+            ],
           ),
           GoRoute(
-            path: ':id/edit',
-            builder: (context, state) => ItemFormScreen(
-              itemId: state.pathParameters['id'],
-            ),
+            path: 'exchange-rate',
+            builder: (context, state) => const ExchangeRateScreen(),
           ),
-        ],
-      ),
-      GoRoute(
-        path: '/exchange-rate',
-        builder: (context, state) => const ExchangeRateScreen(),
-      ),
-      GoRoute(
-        path: '/customers',
-        builder: (context, state) => const CustomersScreen(),
-        routes: [
           GoRoute(
-            path: ':id/bills',
-            builder: (context, state) => CustomerBillsScreen(
-              customerId: state.pathParameters['id']!,
+            path: 'customers',
+            builder: (context, state) => const CustomersScreen(),
+            routes: [
+              GoRoute(
+                path: ':id/bills',
+                builder: (context, state) => CustomerBillsScreen(
+                  customerId: state.pathParameters['id']!,
+                ),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'bills/new',
+            builder: (context, state) => const CreateBillScreen(),
+          ),
+          GoRoute(
+            path: 'bills/:id',
+            builder: (context, state) => BillDetailScreen(
+              billId: state.pathParameters['id']!,
             ),
           ),
+          GoRoute(
+            path: 'profits',
+            builder: (context, state) => const ProfitsScreen(),
+          ),
         ],
-      ),
-      GoRoute(
-        path: '/bills/new',
-        builder: (context, state) => const CreateBillScreen(),
-      ),
-      GoRoute(
-        path: '/bills/:id',
-        builder: (context, state) => BillDetailScreen(
-          billId: state.pathParameters['id']!,
-        ),
-      ),
-      GoRoute(
-        path: '/profits',
-        builder: (context, state) => const ProfitsScreen(),
       ),
     ],
   );
