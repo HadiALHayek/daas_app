@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
 
     for (const line of items as BillLineInput[]) {
       let unitSell = Number(line.unit_sell_price ?? 0);
-      let unitCost = Number(line.unit_item_cost ?? 0);
       const itemCurrency = line.item_currency ?? currency;
 
       if (line.item_id) {
@@ -83,12 +82,6 @@ export async function POST(request: NextRequest) {
           currency,
           rate
         );
-        unitCost = await convertToBillCurrency(
-          Number(catalogItem.cost),
-          catalogItem.currency,
-          currency,
-          rate
-        );
       }
 
       const quantity = Number(line.quantity) || 1;
@@ -98,8 +91,8 @@ export async function POST(request: NextRequest) {
         quantity,
         unit_sell_price: unitSell,
         total_sell: unitSell * quantity,
-        unit_item_cost: unitCost,
-        total_item_cost: unitCost * quantity,
+        unit_item_cost: 0,
+        total_item_cost: 0,
       });
     }
 

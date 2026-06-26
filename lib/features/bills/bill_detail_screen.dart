@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/api/api_errors.dart';
 import '../../core/constants/strings_ar.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../../models/bill.dart';
 import '../../services/pdf_service.dart';
 import '../../services/services.dart';
+import 'add_bill_payment_dialog.dart';
 
 class BillDetailScreen extends ConsumerStatefulWidget {
   const BillDetailScreen({super.key, required this.billId});
@@ -34,14 +36,46 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
     try {
       final bill = await ref.read(billsServiceProvider).getBill(widget.billId);
       setState(() => _bill = bill);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(StringsAr.error)),
+          SnackBar(content: Text(formatAppError(e))),
         );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _addPayment() async {
+    final bill = _bill;
+    if (bill == null || bill.isFullyPaid) return;
+
+    final data = await showBillPaymentDialog(
+      context: context,
+      maxAmount: bill.amountRemaining,
+      currencyLabel: bill.currencyLabel,
+    );
+    if (data == null) return;
+
+    try {
+      await ref.read(billsServiceProvider).addBillPayment(
+            billId: bill.id,
+            amount: data.amount,
+            notes: data.notes,
+          );
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تسجيل الدفعة')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
     }
   }
 
@@ -104,29 +138,75 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                               value: _bill!.customerName ?? '—',
                             ),
                             const Divider(height: 28),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  StringsAr.total,
-                                  style: GoogleFonts.cairo(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
+                            _AmountRow(
+                              label: StringsAr.total,
+                              value:
                                   '${priceFormat.format(_bill!.total)} ${_bill!.currencyLabel}',
-                                  style: GoogleFonts.cairo(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ],
+                              emphasized: true,
+                            ),
+                            const SizedBox(height: 8),
+                            _AmountRow(
+                              label: StringsAr.amountPaid,
+                              value:
+                                  '${priceFormat.format(_bill!.amountPaid)} ${_bill!.currencyLabel}',
+                              color: AppColors.success,
+                            ),
+                            const SizedBox(height: 8),
+                            _AmountRow(
+                              label: StringsAr.amountRemaining,
+                              value:
+                                  '${priceFormat.format(_bill!.amountRemaining)} ${_bill!.currencyLabel}',
+                              color: _bill!.isFullyPaid
+                                  ? AppColors.success
+                                  : AppColors.warning,
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              StringsAr.billPayments,
+                              style: GoogleFonts.cairo(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          if (!_bill!.isFullyPaid)
+                            FilledButton.tonalIcon(
+                              onPressed: _addPayment,
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: const Text(StringsAr.addPayment),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      if (_bill!.payments.isEmpty)
+                        const SectionCard(
+                          child: Text('لا توجد دفعات مسجّلة بعد'),
+                        )
+                      else
+                        ..._bill!.payments.map(
+                          (payment) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: ListItemCard(
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    AppColors.success.withValues(alpha: 0.12),
+                                foregroundColor: AppColors.success,
+                                child: const Icon(Icons.payments_rounded, size: 20),
+                              ),
+                              title:
+                                  '${priceFormat.format(payment.amount)} ${_bill!.currencyLabel}',
+                              subtitle: payment.notes?.isNotEmpty == true
+                                  ? payment.notes!
+                                  : dateFormat.format(payment.paymentDate),
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 16),
                       Text(
                         'الأصناف',
@@ -143,7 +223,7 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                             title: item.itemName,
                             subtitle:
                                 '${StringsAr.quantity}: ${item.quantity}  •  '
-                                '${StringsAr.unitCost}: ${priceFormat.format(item.unitSellPrice)}',
+                                '${StringsAr.unitPrice}: ${priceFormat.format(item.unitSellPrice)}',
                             trailing: Text(
                               '${priceFormat.format(item.totalSell)} ${_bill!.currencyLabel}',
                               style: GoogleFonts.cairo(
@@ -204,6 +284,44 @@ class _InfoRow extends StatelessWidget {
               fontWeight: FontWeight.w600,
               fontSize: 14,
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AmountRow extends StatelessWidget {
+  const _AmountRow({
+    required this.label,
+    required this.value,
+    this.emphasized = false,
+    this.color,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasized;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.cairo(
+            fontSize: emphasized ? 16 : 14,
+            fontWeight: emphasized ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.cairo(
+            fontSize: emphasized ? 22 : 15,
+            fontWeight: FontWeight.w800,
+            color: color ?? (emphasized ? AppColors.primary : null),
           ),
         ),
       ],

@@ -20,7 +20,6 @@ class ItemFormScreen extends ConsumerStatefulWidget {
 class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _costController = TextEditingController();
   final _sellPriceController = TextEditingController();
   String _currency = 'SYP';
   bool _loading = false;
@@ -40,7 +39,6 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
       final items = await ref.read(itemsServiceProvider).getItems();
       final item = items.firstWhere((i) => i.id == widget.itemId);
       _nameController.text = item.name;
-      _costController.text = item.cost.toString();
       _sellPriceController.text = item.sellPrice.toString();
       _currency = item.currency;
     } catch (_) {
@@ -57,7 +55,6 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _costController.dispose();
     _sellPriceController.dispose();
     super.dispose();
   }
@@ -70,7 +67,6 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
     final item = CatalogItem(
       id: widget.itemId ?? '',
       name: _nameController.text.trim(),
-      cost: double.parse(_costController.text),
       sellPrice: double.parse(_sellPriceController.text),
       currency: _currency,
     );
@@ -109,7 +105,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                     children: [
                       PageHeader(
                         title: _isEdit ? 'تعديل الصنف' : 'صنف جديد',
-                        subtitle: 'أدخل تفاصيل التكلفة وسعر البيع',
+                        subtitle: 'أدخل اسم الصنف وسعر البيع',
                       ),
                       const SizedBox(height: 24),
                       ArabicTextField(
@@ -117,17 +113,6 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                         label: StringsAr.name,
                         validator: (v) =>
                             v == null || v.trim().isEmpty ? 'الاسم مطلوب' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      NumberTextField(
-                        controller: _costController,
-                        label: StringsAr.cost,
-                        validator: (v) {
-                          if (v == null || double.tryParse(v) == null) {
-                            return 'أدخل تكلفة صحيحة';
-                          }
-                          return null;
-                        },
                       ),
                       const SizedBox(height: 16),
                       NumberTextField(

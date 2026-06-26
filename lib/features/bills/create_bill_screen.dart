@@ -149,8 +149,6 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
               quantity: line.quantity,
               unitSellPrice: line.catalogItem.sellPrice,
               totalSell: line.catalogItem.sellPrice * line.quantity,
-              unitItemCost: line.catalogItem.cost,
-              totalItemCost: line.catalogItem.cost * line.quantity,
             ),
           )
           .toList();

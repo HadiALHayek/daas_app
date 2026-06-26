@@ -130,7 +130,6 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                             ),
                             title: item.name,
                             subtitle:
-                                '${StringsAr.cost}: ${_priceFormat.format(item.cost)}  •  '
                                 '${StringsAr.sellPrice}: ${_priceFormat.format(item.sellPrice)}',
                             trailing: CurrencyBadge(currency: item.currency),
                             onEdit: () async {

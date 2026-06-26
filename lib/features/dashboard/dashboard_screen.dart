@@ -115,6 +115,13 @@ class DashboardScreen extends ConsumerWidget {
                   onTap: () => context.push('/bills/new'),
                 ),
                 DashboardTile(
+                  icon: Icons.payments_rounded,
+                  label: StringsAr.expenses,
+                  subtitle: 'مواد، نقل، أجور',
+                  color: AppColors.dashboardTiles[5],
+                  onTap: () => context.push('/expenses'),
+                ),
+                DashboardTile(
                   icon: Icons.insights_rounded,
                   label: StringsAr.profits,
                   subtitle: 'تقارير الأرباح',

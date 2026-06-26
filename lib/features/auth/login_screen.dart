@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/api/api_errors.dart';
+import '../../core/constants/api_config.dart';
 import '../../core/constants/strings_ar.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_widgets.dart';
@@ -45,9 +48,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           );
       if (mounted) context.go('/');
     } catch (e) {
-      final message = e is Exception
-          ? e.toString().replaceFirst('Exception: ', '')
-          : StringsAr.error;
+      final message = formatAppError(e);
       setState(() => _error = message);
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -169,6 +170,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               if (_error != null) ...[
                                 const SizedBox(height: 16),
                                 AppErrorBanner(message: _error!),
+                              ],
+                              if (kDebugMode) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  'API: ${ApiConfig.baseUrl}',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
                               ],
                               const SizedBox(height: 24),
                               FilledButton(

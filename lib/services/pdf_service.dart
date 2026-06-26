@@ -111,7 +111,7 @@ class PdfService {
                 headers: [
                   StringsAr.itemName,
                   StringsAr.quantity,
-                  StringsAr.unitCost,
+                  StringsAr.unitPrice,
                   StringsAr.total,
                 ],
                 data: bill.items

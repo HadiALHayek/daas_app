@@ -12,11 +12,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   try {
     const body = await request.json();
-    const { name, cost, sell_price, currency } = body;
+    const { name, sell_price, currency } = body;
 
     const updates: Record<string, unknown> = {};
     if (name != null) updates.name = name;
-    if (cost != null) updates.cost = Number(cost);
     if (sell_price != null) updates.sell_price = Number(sell_price);
     if (currency != null) {
       if (!["SYP", "USD"].includes(currency)) {

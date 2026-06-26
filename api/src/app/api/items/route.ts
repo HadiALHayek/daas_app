@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, cost, sell_price, currency } = body;
 
-    if (!name || cost == null || sell_price == null || !currency) {
-      return Response.json({ error: "جميع الحقول مطلوبة" }, { status: 400 });
+    if (!name || sell_price == null || !currency) {
+      return Response.json({ error: "الاسم وسعر البيع والعملة مطلوبة" }, { status: 400 });
     }
 
     if (!["SYP", "USD"].includes(currency)) {
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       .from("items")
       .insert({
         name,
-        cost: Number(cost),
+        cost: 0,
         sell_price: Number(sell_price),
         currency,
       })

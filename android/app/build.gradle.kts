@@ -39,6 +39,26 @@ android {
     }
 }
 
+android.applicationVariants.configureEach {
+    outputs.configureEach {
+        (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
+            "DaasApp.apk"
+    }
+}
+
+afterEvaluate {
+    tasks.named("assembleRelease").configure {
+        doLast {
+            val releaseApk = layout.buildDirectory.file("outputs/apk/release/DaasApp.apk").get().asFile
+            val flutterApkDir = layout.buildDirectory.dir("outputs/flutter-apk").get().asFile
+            if (releaseApk.exists()) {
+                flutterApkDir.mkdirs()
+                releaseApk.copyTo(flutterApkDir.resolve("DaasApp.apk"), overwrite = true)
+            }
+        }
+    }
+}
+
 flutter {
     source = "../.."
 }

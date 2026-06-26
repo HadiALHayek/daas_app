@@ -23,5 +23,6 @@ abstract final class AppColors {
     Color(0xFF7C3AED),
     Color(0xFFB45309),
     Color(0xFFBE123C),
+    Color(0xFF0369A1),
   ];
 }

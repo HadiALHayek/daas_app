@@ -7,10 +7,13 @@ interface BillRow {
   currency: string;
   usd_to_syp_rate: number;
   created_at: string;
-  bill_items: Array<{
-    total_sell: number;
-    total_item_cost: number;
-  }>;
+  bill_items: Array<{ total_sell: number }>;
+}
+
+interface ExpenseRow {
+  amount: number;
+  currency: string;
+  payment_date: string;
 }
 
 function toSyp(amount: number, currency: string, rate: number): number {
@@ -20,17 +23,28 @@ function toSyp(amount: number, currency: string, rate: number): number {
 
 function aggregateBills(bills: BillRow[]) {
   let incoming = 0;
-  let outgoing = 0;
 
   for (const bill of bills) {
     const rate = Number(bill.usd_to_syp_rate);
     for (const item of bill.bill_items ?? []) {
       incoming += toSyp(Number(item.total_sell), bill.currency, rate);
-      outgoing += toSyp(Number(item.total_item_cost), bill.currency, rate);
     }
   }
 
-  return { incoming, outgoing, profit: incoming - outgoing, bill_count: bills.length };
+  return { incoming, bill_count: bills.length };
+}
+
+function aggregateExpenses(
+  expenses: ExpenseRow[],
+  defaultRate: number
+) {
+  let outgoing = 0;
+
+  for (const expense of expenses) {
+    outgoing += toSyp(Number(expense.amount), expense.currency, defaultRate);
+  }
+
+  return outgoing;
 }
 
 export async function GET(request: NextRequest) {
@@ -53,6 +67,14 @@ export async function GET(request: NextRequest) {
 
     const supabase = getAdminClient();
 
+    const { data: settings } = await supabase
+      .from("settings")
+      .select("usd_to_syp")
+      .eq("id", 1)
+      .maybeSingle();
+
+    const defaultRate = Number(settings?.usd_to_syp ?? 15000);
+
     const startDate =
       period === "monthly"
         ? new Date(year, month - 1, 1)
@@ -62,24 +84,40 @@ export async function GET(request: NextRequest) {
         ? new Date(year, month, 1)
         : new Date(year + 1, 0, 1);
 
-    const { data, error } = await supabase
-      .from("bills")
-      .select(
+    const startIso = startDate.toISOString();
+    const endIso = endDate.toISOString();
+
+    const [billsResult, expensesResult] = await Promise.all([
+      supabase
+        .from("bills")
+        .select(
+          `
+          id,
+          currency,
+          usd_to_syp_rate,
+          created_at,
+          bill_items ( total_sell )
         `
-        id,
-        currency,
-        usd_to_syp_rate,
-        created_at,
-        bill_items ( total_sell, total_item_cost )
-      `
-      )
-      .gte("created_at", startDate.toISOString())
-      .lt("created_at", endDate.toISOString());
+        )
+        .gte("created_at", startIso)
+        .lt("created_at", endIso),
+      supabase
+        .from("expense_payments")
+        .select("amount, currency, payment_date")
+        .gte("payment_date", startIso)
+        .lt("payment_date", endIso),
+    ]);
 
-    if (error) return serverError(error.message);
+    if (billsResult.error) return serverError(billsResult.error.message);
+    if (expensesResult.error) return serverError(expensesResult.error.message);
 
-    const bills = (data ?? []) as BillRow[];
-    const totals = aggregateBills(bills);
+    const bills = (billsResult.data ?? []) as BillRow[];
+    const expenses = (expensesResult.data ?? []) as ExpenseRow[];
+
+    const billTotals = aggregateBills(bills);
+    const outgoing = aggregateExpenses(expenses, defaultRate);
+    const incoming = billTotals.incoming;
+    const profit = incoming - outgoing;
 
     const breakdown: Array<{
       month: number;
@@ -97,8 +135,20 @@ export async function GET(request: NextRequest) {
           const d = new Date(b.created_at);
           return d >= mStart && d < mEnd;
         });
-        const monthTotals = aggregateBills(monthBills);
-        breakdown.push({ month: m, ...monthTotals });
+        const monthExpenses = expenses.filter((e) => {
+          const d = new Date(e.payment_date);
+          return d >= mStart && d < mEnd;
+        });
+        const monthBillTotals = aggregateBills(monthBills);
+        const monthOutgoing = aggregateExpenses(monthExpenses, defaultRate);
+        const monthIncoming = monthBillTotals.incoming;
+        breakdown.push({
+          month: m,
+          incoming: monthIncoming,
+          outgoing: monthOutgoing,
+          profit: monthIncoming - monthOutgoing,
+          bill_count: monthBillTotals.bill_count,
+        });
       }
     }
 
@@ -107,7 +157,10 @@ export async function GET(request: NextRequest) {
       year,
       month: period === "monthly" ? month : undefined,
       currency: "SYP",
-      ...totals,
+      incoming,
+      outgoing,
+      profit,
+      bill_count: billTotals.bill_count,
       breakdown,
     });
   } catch (e) {

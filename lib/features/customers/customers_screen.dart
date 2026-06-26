@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_errors.dart';
 import '../../core/constants/strings_ar.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_widgets.dart';
@@ -19,6 +20,7 @@ class CustomersScreen extends ConsumerStatefulWidget {
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   List<Customer>? _customers;
   bool _loading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -27,21 +29,19 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final customers = await ref.read(customersServiceProvider).getCustomers();
-      setState(() => _customers = customers);
+      setState(() {
+        _customers = customers;
+        _loadError = null;
+      });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e is Exception
-                  ? e.toString().replaceFirst('Exception: ', '')
-                  : StringsAr.error,
-            ),
-          ),
-        );
+        setState(() => _loadError = formatAppError(e));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -159,7 +159,16 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       ),
       body: _loading
           ? const AppLoading()
-          : _customers == null || _customers!.isEmpty
+          : _loadError != null
+              ? EmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: _loadError!,
+                  action: FilledButton(
+                    onPressed: _load,
+                    child: const Text(StringsAr.retry),
+                  ),
+                )
+              : _customers == null || _customers!.isEmpty
               ? EmptyState(
                   icon: Icons.people_outline,
                   title: StringsAr.noData,

@@ -4,6 +4,7 @@ import '../core/api/api_client.dart';
 import '../core/api/api_errors.dart';
 import '../models/bill.dart';
 import '../models/customer.dart';
+import '../models/expense_payment.dart';
 import '../models/item.dart';
 import '../models/profit_report.dart';
 
@@ -37,10 +38,7 @@ class AuthService {
 
   Future<void> logout() => _client.clearToken();
 
-  Future<bool> isLoggedIn() async {
-    final token = await _client.getToken();
-    return token != null && token.isNotEmpty;
-  }
+  Future<bool> isLoggedIn() => _client.hasValidSession();
 }
 
 final authServiceProvider = Provider<AuthService>(
@@ -105,10 +103,14 @@ class CustomersService {
   final ApiClient _client;
 
   Future<List<Customer>> getCustomers() async {
-    final response = await _client.dio.get('/api/customers');
-    return (response.data as List)
-        .map((e) => Customer.fromJson(e as Map<String, dynamic>))
-        .toList();
+    try {
+      final response = await _client.dio.get('/api/customers');
+      return (response.data as List)
+          .map((e) => Customer.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
   }
 
   Future<Customer> createCustomer(Customer customer) async {
@@ -146,11 +148,15 @@ class CustomersService {
   }
 
   Future<List<Bill>> getCustomerBills(String customerId) async {
-    final response =
-        await _client.dio.get('/api/customers/$customerId/bills');
-    return (response.data as List)
-        .map((e) => Bill.fromJson(e as Map<String, dynamic>))
-        .toList();
+    try {
+      final response =
+          await _client.dio.get('/api/customers/$customerId/bills');
+      return (response.data as List)
+          .map((e) => Bill.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
   }
 }
 
@@ -190,10 +196,81 @@ class BillsService {
       throw Exception(extractApiError(e));
     }
   }
+
+  Future<BillPayment> addBillPayment({
+    required String billId,
+    required double amount,
+    String? notes,
+  }) async {
+    try {
+      final response = await _client.dio.post(
+        '/api/bills/$billId/payments',
+        data: {
+          'amount': amount,
+          if (notes != null) 'notes': notes,
+        },
+      );
+      return BillPayment.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
 }
 
 final billsServiceProvider = Provider<BillsService>(
   (ref) => BillsService(ref.read(apiClientProvider)),
+);
+
+class ExpensesService {
+  ExpensesService(this._client);
+  final ApiClient _client;
+
+  Future<List<ExpensePayment>> getExpenses() async {
+    try {
+      final response = await _client.dio.get('/api/expenses');
+      return (response.data as List)
+          .map((e) => ExpensePayment.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<ExpensePayment> createExpense(ExpensePayment expense) async {
+    try {
+      final response = await _client.dio.post(
+        '/api/expenses',
+        data: expense.toJson(),
+      );
+      return ExpensePayment.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<ExpensePayment> updateExpense(String id, ExpensePayment expense) async {
+    try {
+      final response = await _client.dio.put(
+        '/api/expenses/$id',
+        data: expense.toJson(),
+      );
+      return ExpensePayment.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<void> deleteExpense(String id) async {
+    try {
+      await _client.dio.delete('/api/expenses/$id');
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+}
+
+final expensesServiceProvider = Provider<ExpensesService>(
+  (ref) => ExpensesService(ref.read(apiClientProvider)),
 );
 
 class ReportsService {

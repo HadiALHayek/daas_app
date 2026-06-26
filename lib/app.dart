@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/auth/session_scope.dart';
 import '../core/constants/strings_ar.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/login_screen.dart';
@@ -10,6 +11,7 @@ import '../features/bills/create_bill_screen.dart';
 import '../features/customers/customer_bills_screen.dart';
 import '../features/customers/customers_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
+import '../features/expenses/expenses_screen.dart';
 import '../features/items/item_form_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/reports/profits_screen.dart';
@@ -19,8 +21,11 @@ import '../services/services.dart';
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final sessionRefresh = ref.watch(sessionRefreshProvider);
+
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
+    refreshListenable: sessionRefresh,
     initialLocation: '/login',
     redirect: (context, state) async {
       final isLoggedIn = await ref.read(authServiceProvider).isLoggedIn();
@@ -82,6 +87,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
+            path: 'expenses',
+            builder: (context, state) => const ExpensesScreen(),
+          ),
+          GoRoute(
             path: 'profits',
             builder: (context, state) => const ProfitsScreen(),
           ),
@@ -98,17 +107,20 @@ class DaasApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
 
-    return MaterialApp.router(
-      title: StringsAr.appTitle,
-      theme: AppTheme.light,
-      locale: const Locale('ar'),
-      builder: (context, child) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
-      routerConfig: router,
+    return SessionScope(
+      router: router,
+      child: MaterialApp.router(
+        title: StringsAr.appTitle,
+        theme: AppTheme.light,
+        locale: const Locale('ar'),
+        builder: (context, child) {
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
+        routerConfig: router,
+      ),
     );
   }
 }

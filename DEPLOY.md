@@ -44,16 +44,16 @@ flutter pub get
 flutter build apk --release --dart-define=API_BASE_URL=https://your-app.vercel.app
 ```
 
-APK output: `build/app/outputs/flutter-apk/app-release.apk`
+APK output: `build/app/outputs/flutter-apk/DaasApp.apk`
 
 ### Run in debug
 
 ```bash
-flutter run --dart-define=API_BASE_URL=https://daas-okkwi4s6y-hadialhayeks-projects.vercel.app/
+flutter run --dart-define=API_BASE_URL=https://daas-app.vercel.app
 ```
 
 
-curl -X POST "https://daas-okkwi4s6y-hadialhayeks-projects.vercel.app/" -H "Content-Type: application/json" -d "{\"email\":\"Daas@Fac.com\",\"password\":\"Ahmad_Daas\"}"
+curl -X POST "https://daas-app.vercel.app/api/auth/login" -H "Content-Type: application/json" -d "{\"email\":\"Daas@Fac.com\",\"password\":\"Ahmad_Daas\"}"
 
 
 ## 4. First login
