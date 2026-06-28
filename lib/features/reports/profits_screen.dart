@@ -25,7 +25,8 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
   bool _loading = false;
   String? _loadError;
 
-  final _numberFormat = NumberFormat('#,##0.##', 'ar');
+  final _usdFormat = NumberFormat('#,##0.##', 'en_US');
+  final _sypFormat = NumberFormat('#,###', 'ar');
 
   static const _monthNames = [
     'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
@@ -63,11 +64,8 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
     }
   }
 
-  String _syp(double amount) =>
-      '${_numberFormat.format(amount)} ${StringsAr.syp}';
-
-  String _usd(double amount) =>
-      '${_numberFormat.format(amount)} ${StringsAr.usd}';
+  String _usd(double amount) => '\$${_usdFormat.format(amount)}';
+  String _syp(double amount) => '${_sypFormat.format(amount)} ل.س';
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +103,8 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
                       Expanded(
                         child: DropdownButtonFormField<int>(
                           initialValue: _year,
-                          decoration: const InputDecoration(labelText: StringsAr.year),
+                          decoration:
+                              const InputDecoration(labelText: StringsAr.year),
                           items: List.generate(5, (i) {
                             final year = DateTime.now().year - i;
                             return DropdownMenuItem(
@@ -126,7 +125,8 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             initialValue: _month,
-                            decoration: const InputDecoration(labelText: StringsAr.month),
+                            decoration: const InputDecoration(
+                                labelText: StringsAr.month),
                             items: List.generate(12, (i) {
                               return DropdownMenuItem(
                                 value: i + 1,
@@ -161,86 +161,66 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
                         ),
                       )
                     : _report == null
-                    ? const EmptyState(
-                        icon: Icons.bar_chart_rounded,
-                        title: StringsAr.noData,
-                      )
-                    : _buildReport(_report!),
+                        ? const EmptyState(
+                            icon: Icons.bar_chart_rounded,
+                            title: StringsAr.noData,
+                          )
+                        : _buildReport(_report!),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDualMetric({
-    required String title,
-    required CurrencyTotals syp,
-    required CurrencyTotals usd,
-    required IconData icon,
-    required Color color,
-    required double Function(CurrencyTotals) pick,
-    Color? backgroundColor,
-  }) {
-    return StatMetricCard(
-      title: title,
-      value: _syp(pick(syp)),
-      secondaryValue: _usd(pick(usd)),
-      icon: icon,
-      color: color,
-      backgroundColor: backgroundColor,
-    );
+  @override
+  Widget buildReport(ProfitReport report) {
+    // This is a placeholder to satisfy potential build requirements if needed.
+    return _buildReport(report);
   }
 
   Widget _buildReport(ProfitReport report) {
+    final totals = report.report;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildDualMetric(
-          title: 'إجمالي المبيعات (فواتير)',
-          syp: report.syp,
-          usd: report.usd,
+        StatMetricCard(
+          title: 'إجمالي المبيعات (قيمة الفواتير بالدولار)',
+          value: _usd(totals.incoming),
           icon: Icons.receipt_long_rounded,
           color: AppColors.primary,
-          pick: (t) => t.incoming,
         ),
         const SizedBox(height: 12),
-        _buildDualMetric(
-          title: 'التحصيل النقدي (دفعات)',
-          syp: report.syp,
-          usd: report.usd,
+        StatMetricCard(
+          title: 'التحصيل النقدي (المبالغ المقبوضة بالدولار)',
+          value: _usd(totals.collected),
           icon: Icons.payments_rounded,
           color: AppColors.success,
           backgroundColor: AppColors.successSoft,
-          pick: (t) => t.collected,
         ),
         const SizedBox(height: 12),
-        _buildDualMetric(
+        StatMetricCard(
           title: 'المبالغ المتبقية (ديون)',
-          syp: report.syp,
-          usd: report.usd,
+          value: _usd(totals.uncollectedUsd),
+          secondaryValue: _syp(totals.uncollectedSyp),
           icon: Icons.pending_actions_rounded,
           color: AppColors.warning,
           backgroundColor: AppColors.accentSoft,
-          pick: (t) => t.uncollected,
         ),
         const SizedBox(height: 12),
-        _buildDualMetric(
-          title: StringsAr.outgoing,
-          syp: report.syp,
-          usd: report.usd,
+        StatMetricCard(
+          title: 'إجمالي المصروفات (بالدولار)',
+          value: _usd(totals.outgoing),
           icon: Icons.trending_down_rounded,
           color: AppColors.error,
           backgroundColor: AppColors.errorSoft,
-          pick: (t) => t.outgoing,
         ),
         const SizedBox(height: 12),
-        _buildDualMetric(
-          title: StringsAr.profit,
-          syp: report.syp,
-          usd: report.usd,
+        StatMetricCard(
+          title: 'صافي الربح المحقق (بالدولار)',
+          value: _usd(totals.profit),
           icon: Icons.account_balance_wallet_rounded,
           color: AppColors.info,
-          pick: (t) => t.profit,
         ),
         const SizedBox(height: 12),
         StatMetricCard(
@@ -260,15 +240,16 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
           ),
           const SizedBox(height: 12),
           ...report.breakdown.map((row) {
-            if (row.billCount == 0 && row.syp.collected == 0 && row.usd.collected == 0) return const SizedBox.shrink();
+            if (row.billCount == 0 &&
+                row.report.collected == 0 &&
+                row.report.incoming == 0) return const SizedBox.shrink();
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: ListItemCard(
                 title: _monthNames[row.month - 1],
-                subtitle:
-                    'التحصيل: ${_syp(row.syp.collected)} / ${_usd(row.usd.collected)}\n'
-                    'المتبقي: ${_syp(row.syp.uncollected)} / ${_usd(row.usd.uncollected)}\n'
-                    'الأرباح: ${_syp(row.syp.profit)} / ${_usd(row.usd.profit)}',
+                subtitle: 'المقبوض: ${_usd(row.report.collected)}\n'
+                    'المتبقي: ${_usd(row.report.uncollectedUsd)} • ${_syp(row.report.uncollectedSyp)}\n'
+                    'الربح الصافي: ${_usd(row.report.profit)}',
                 trailing: Text(
                   '${row.billCount} فاتورة',
                   style: GoogleFonts.cairo(

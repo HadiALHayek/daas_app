@@ -2,23 +2,25 @@ class CurrencyTotals {
   const CurrencyTotals({
     required this.incoming,
     required this.collected,
-    required this.uncollected,
+    required this.uncollectedUsd,
+    required this.uncollectedSyp,
     required this.outgoing,
     required this.profit,
   });
 
   final double incoming;
   final double collected;
-  final double uncollected;
+  final double uncollectedUsd;
+  final double uncollectedSyp;
   final double outgoing;
   final double profit;
 
   factory CurrencyTotals.fromJson(Map<String, dynamic> json) {
-    final incoming = (json['incoming'] as num).toDouble();
     return CurrencyTotals(
-      incoming: incoming,
-      collected: (json['collected'] as num?)?.toDouble() ?? incoming,
-      uncollected: (json['uncollected'] as num?)?.toDouble() ?? 0,
+      incoming: (json['incoming'] as num).toDouble(),
+      collected: (json['collected'] as num).toDouble(),
+      uncollectedUsd: (json['uncollected_usd'] as num? ?? 0).toDouble(),
+      uncollectedSyp: (json['uncollected_syp'] as num? ?? 0).toDouble(),
       outgoing: (json['outgoing'] as num).toDouble(),
       profit: (json['profit'] as num).toDouble(),
     );
@@ -27,7 +29,8 @@ class CurrencyTotals {
   static const zero = CurrencyTotals(
     incoming: 0,
     collected: 0,
-    uncollected: 0,
+    uncollectedUsd: 0,
+    uncollectedSyp: 0,
     outgoing: 0,
     profit: 0,
   );
@@ -36,21 +39,18 @@ class CurrencyTotals {
 class ProfitBreakdown {
   const ProfitBreakdown({
     required this.month,
-    required this.syp,
-    required this.usd,
+    required this.report,
     required this.billCount,
   });
 
   final int month;
-  final CurrencyTotals syp;
-  final CurrencyTotals usd;
+  final CurrencyTotals report;
   final int billCount;
 
   factory ProfitBreakdown.fromJson(Map<String, dynamic> json) {
     return ProfitBreakdown(
       month: json['month'] as int,
-      syp: CurrencyTotals.fromJson(json['syp'] as Map<String, dynamic>),
-      usd: CurrencyTotals.fromJson(json['usd'] as Map<String, dynamic>),
+      report: CurrencyTotals.fromJson(json['report'] as Map<String, dynamic>),
       billCount: json['bill_count'] as int,
     );
   }
@@ -60,8 +60,7 @@ class ProfitReport {
   const ProfitReport({
     required this.period,
     required this.year,
-    required this.syp,
-    required this.usd,
+    required this.report,
     required this.billCount,
     required this.breakdown,
     this.month,
@@ -70,8 +69,7 @@ class ProfitReport {
   final String period;
   final int year;
   final int? month;
-  final CurrencyTotals syp;
-  final CurrencyTotals usd;
+  final CurrencyTotals report;
   final int billCount;
   final List<ProfitBreakdown> breakdown;
 
@@ -80,8 +78,7 @@ class ProfitReport {
       period: json['period'] as String,
       year: json['year'] as int,
       month: json['month'] as int?,
-      syp: CurrencyTotals.fromJson(json['syp'] as Map<String, dynamic>),
-      usd: CurrencyTotals.fromJson(json['usd'] as Map<String, dynamic>),
+      report: CurrencyTotals.fromJson(json['report'] as Map<String, dynamic>),
       billCount: json['bill_count'] as int,
       breakdown: (json['breakdown'] as List? ?? [])
           .map((e) => ProfitBreakdown.fromJson(e as Map<String, dynamic>))
