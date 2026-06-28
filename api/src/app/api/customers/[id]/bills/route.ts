@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         subtotal,
         total,
         created_at,
-        customers ( id, name, phone )
+        customers ( id, name, phone, address )
       `
       )
       .eq("customer_id", id)

@@ -30,6 +30,7 @@ Future<BillPaymentFormResult?> showBillPaymentDialog({
 
 class _BillPaymentDialog extends StatefulWidget {
   const _BillPaymentDialog({
+    super.key,
     required this.maxAmount,
     required this.currencyLabel,
   });
@@ -43,8 +44,16 @@ class _BillPaymentDialog extends StatefulWidget {
 
 class _BillPaymentDialogState extends State<_BillPaymentDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _amountController = TextEditingController();
-  final _notesController = TextEditingController();
+  late final TextEditingController _amountController;
+  late final TextEditingController _notesController;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _amountController = TextEditingController();
+    _notesController = TextEditingController();
+  }
 
   @override
   void dispose() {
@@ -54,7 +63,13 @@ class _BillPaymentDialogState extends State<_BillPaymentDialog> {
   }
 
   void _submit() {
+    if (_isSubmitting) return;
     if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSubmitting = true);
+
+    // Unfocus to avoid keyboard issues during transition
+    FocusScope.of(context).unfocus();
 
     Navigator.pop(
       context,

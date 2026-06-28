@@ -29,6 +29,7 @@ class BillItem {
     required this.unitSellPrice,
     required this.totalSell,
     this.itemId,
+    this.priceOverride = false,
   });
 
   final String? id;
@@ -37,6 +38,7 @@ class BillItem {
   final double quantity;
   final double unitSellPrice;
   final double totalSell;
+  final bool priceOverride;
 
   factory BillItem.fromJson(Map<String, dynamic> json) {
     return BillItem(
@@ -53,6 +55,13 @@ class BillItem {
         if (itemId != null) 'item_id': itemId,
         'item_name': itemName,
         'quantity': quantity,
+        if (priceOverride) 'unit_sell_price': unitSellPrice,
+      };
+
+  Map<String, dynamic> toUpdateJson() => {
+        'id': id,
+        'unit_sell_price': unitSellPrice,
+        'quantity': quantity,
       };
 }
 
@@ -66,9 +75,11 @@ class Bill {
     required this.total,
     required this.sellerSignature,
     required this.createdAt,
+    this.discount = 0,
     this.customerId,
     this.customerName,
     this.customerPhone,
+    this.customerAddress,
     this.items = const [],
     this.payments = const [],
     this.amountPaid = 0,
@@ -80,12 +91,14 @@ class Bill {
   final String currency;
   final double usdToSypRate;
   final double subtotal;
+  final double discount;
   final double total;
   final String sellerSignature;
   final DateTime createdAt;
   final String? customerId;
   final String? customerName;
   final String? customerPhone;
+  final String? customerAddress;
   final List<BillItem> items;
   final List<BillPayment> payments;
   final double amountPaid;
@@ -93,40 +106,56 @@ class Bill {
 
   factory Bill.fromJson(Map<String, dynamic> json) {
     final customer = json['customers'];
-    final payments = (json['payments'] as List? ?? json['bill_payments'] as List? ?? [])
+    
+    // Aggressively find payments in the JSON
+    final rawPayments = json['payments'] as List? ?? 
+                        json['bill_payments'] as List? ?? 
+                        json['billPayments'] as List? ?? 
+                        [];
+                        
+    final paymentsList = rawPayments
         .map((e) => BillPayment.fromJson(e as Map<String, dynamic>))
         .toList();
 
-    final amountPaid = json['amount_paid'] != null
-        ? (json['amount_paid'] as num).toDouble()
-        : payments.fold<double>(0, (sum, p) => sum + p.amount);
+    // Sum from list to ensure accuracy
+    final sumOfPayments = paymentsList.fold<double>(0, (sum, p) => sum + p.amount);
+    
+    // Check multiple possible field names for amount_paid
+    final amountPaidField = (json['amount_paid'] as num? ?? 
+                             json['amountPaid'] as num? ?? 
+                             0).toDouble();
+                             
+    // The final amount paid is either what the field says or the sum of payments, whichever is greater.
+    final finalAmountPaid = sumOfPayments > amountPaidField ? sumOfPayments : amountPaidField;
 
-    final total = (json['total'] as num).toDouble();
+    final totalValue = (json['total'] as num? ?? 0).toDouble();
 
     return Bill(
       id: json['id'] as String,
-      billNumber: (json['bill_number'] as num).toInt(),
-      currency: json['currency'] as String,
-      usdToSypRate: (json['usd_to_syp_rate'] as num).toDouble(),
-      subtotal: (json['subtotal'] as num).toDouble(),
-      total: total,
+      billNumber: (json['bill_number'] as num? ?? 0).toInt(),
+      currency: json['currency'] as String? ?? 'SYP',
+      usdToSypRate: (json['usd_to_syp_rate'] as num? ?? 1).toDouble(),
+      subtotal: (json['subtotal'] as num? ?? 0).toDouble(),
+      discount: (json['discount'] as num? ?? 0).toDouble(),
+      total: totalValue,
       sellerSignature: json['seller_signature'] as String? ?? '',
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at'] as String) 
+          : DateTime.now(),
       customerId: customer is Map ? customer['id'] as String? : json['customer_id'] as String?,
       customerName: customer is Map ? customer['name'] as String? : null,
       customerPhone: customer is Map ? customer['phone'] as String? : null,
+      customerAddress: customer is Map ? customer['address'] as String? : null,
       items: (json['items'] as List? ?? json['bill_items'] as List? ?? [])
           .map((e) => BillItem.fromJson(e as Map<String, dynamic>))
           .toList(),
-      payments: payments,
-      amountPaid: amountPaid,
-      amountRemaining: json['amount_remaining'] != null
-          ? (json['amount_remaining'] as num).toDouble()
-          : total - amountPaid,
+      payments: paymentsList,
+      amountPaid: finalAmountPaid,
+      amountRemaining: (totalValue - finalAmountPaid).clamp(0, double.infinity),
     );
   }
 
   String get currencyLabel => currency == 'SYP' ? 'ل.س' : r'$';
 
-  bool get isFullyPaid => amountRemaining <= 0.001;
+  bool get isFullyPaid => amountRemaining <= 0.05;
 }

@@ -34,6 +34,7 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final bills = await ref
@@ -49,6 +50,7 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
         }
       }
 
+      if (!mounted) return;
       setState(() {
         _bills = bills;
         _customer = customer;
@@ -86,14 +88,14 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
               id: _customer!.id,
               name: data.name,
               phone: data.phone,
+              address: data.address,
             ),
           );
+      if (!mounted) return;
       setState(() => _customer = updated);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم تحديث بيانات العميل')),
         );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

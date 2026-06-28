@@ -1,4 +1,6 @@
--- Run in Supabase SQL Editor
+-- Run this in Supabase → SQL Editor (New query → Run)
+-- Creates: expense_payments, bill_payments
+-- Table name is expense_payments (NOT "expences" or "expenses")
 
 -- Operational expenses (materials, transport, labor, etc.)
 create table if not exists expense_payments (

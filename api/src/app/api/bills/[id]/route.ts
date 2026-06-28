@@ -1,5 +1,11 @@
 import { NextRequest } from "next/server";
-import { verifyAuth, unauthorized, serverError, notFound } from "@/lib/auth";
+import {
+  verifyAuth,
+  unauthorized,
+  serverError,
+  notFound,
+  badRequest,
+} from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -30,35 +36,146 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   try {
     const supabase = getAdminClient();
-    const { data: bill, error } = await supabase
-      .from("bills")
-      .select(
-        `
-        *,
-        customers ( id, name, phone ),
-        bill_items ( * ),
-        bill_payments ( * )
-      `
-      )
-      .eq("id", id)
-      .single();
 
-    if (error || !bill) return notFound();
+    // Fetch bill and payments separately to ensure reliability
+    const [billResult, paymentsResult, itemsResult] = await Promise.all([
+      supabase
+        .from("bills")
+        .select("*, customers(*)")
+        .eq("id", id)
+        .single(),
+      supabase
+        .from("bill_payments")
+        .select("*")
+        .eq("bill_id", id)
+        .order("payment_date", { ascending: true }),
+      supabase
+        .from("bill_items")
+        .select("*")
+        .eq("bill_id", id)
+    ]);
 
-    const payments = (bill.bill_payments ?? []).map(mapPayment);
-    const amountPaid = payments.reduce(
-      (sum: number, p: { amount: number }) => sum + p.amount,
-      0
-    );
+    if (billResult.error || !billResult.data) return notFound();
+
+    const bill = billResult.data;
+    const payments = (paymentsResult.data ?? []).map(mapPayment);
+    const items = (itemsResult.data ?? []).map(mapBillItem);
+
+    const amountPaid = Number(payments.reduce((sum, p) => sum + p.amount, 0).toFixed(2));
+    const total = Number(Number(bill.total).toFixed(2));
 
     return Response.json({
       ...bill,
       usd_to_syp_rate: Number(bill.usd_to_syp_rate),
       subtotal: Number(bill.subtotal),
-      total: Number(bill.total),
+      discount: Number(bill.discount ?? 0),
+      total,
       amount_paid: amountPaid,
-      amount_remaining: Number(bill.total) - amountPaid,
-      items: (bill.bill_items ?? []).map(mapBillItem),
+      amount_remaining: Number((total - amountPaid).toFixed(2)),
+      items,
+      payments,
+    });
+  } catch (e) {
+    return serverError(e instanceof Error ? e.message : "خطأ");
+  }
+}
+
+interface BillLineUpdate {
+  id: string;
+  unit_sell_price?: number;
+  quantity?: number;
+}
+
+export async function PUT(request: NextRequest, context: RouteContext) {
+  const userId = await verifyAuth(request);
+  if (!userId) return unauthorized();
+
+  const { id } = await context.params;
+
+  try {
+    const body = await request.json();
+    const discount =
+      body?.discount != null ? Math.max(0, Number(body.discount)) : null;
+    const items = body?.items as BillLineUpdate[] | undefined;
+
+    const supabase = getAdminClient();
+
+    const { data: bill, error: billError } = await supabase
+      .from("bills")
+      .select("*, bill_items(*), bill_payments(*)")
+      .eq("id", id)
+      .single();
+
+    if (billError || !bill) return notFound();
+
+    if (items?.length) {
+      for (const line of items) {
+        if (!line.id) continue;
+        const existing = (bill.bill_items as any[]).find((i) => i.id === line.id);
+        if (!existing) continue;
+
+        const unitPrice =
+          line.unit_sell_price != null
+            ? Number(line.unit_sell_price)
+            : Number(existing.unit_sell_price);
+        const quantity =
+          line.quantity != null
+            ? Number(line.quantity)
+            : Number(existing.quantity);
+
+        if (unitPrice < 0 || quantity <= 0) {
+          return badRequest("بيانات الصنف غير صالحة");
+        }
+
+        await supabase
+          .from("bill_items")
+          .update({
+            unit_sell_price: unitPrice,
+            quantity,
+            total_sell: Number((unitPrice * quantity).toFixed(2)),
+          })
+          .eq("id", line.id);
+      }
+    }
+
+    const { data: updatedItems } = await supabase
+      .from("bill_items")
+      .select("*")
+      .eq("bill_id", id);
+
+    const subtotal = (updatedItems ?? []).reduce(
+      (sum, i) => sum + Number(i.total_sell),
+      0
+    );
+    const newDiscount =
+      discount != null ? discount : Number(bill.discount ?? 0);
+    const total = Number((subtotal - newDiscount).toFixed(2));
+
+    const payments = (bill.bill_payments as any[] ?? []).map(mapPayment);
+    const amountPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+
+    if (total < amountPaid - 0.01) {
+      return badRequest("لا يمكن أن يكون الإجمالي أقل من المبلغ المدفوع");
+    }
+
+    const { data: updatedBill, error: updateError } = await supabase
+      .from("bills")
+      .update({
+        subtotal: Number(subtotal.toFixed(2)),
+        discount: Number(newDiscount.toFixed(2)),
+        total
+      })
+      .eq("id", id)
+      .select("*, customers(*)")
+      .single();
+
+    if (updateError) return serverError(updateError.message);
+
+    return Response.json({
+      ...updatedBill,
+      amount_paid: amountPaid,
+      amount_remaining: Number((total - amountPaid).toFixed(2)),
+      items: (updatedItems ?? []).map(mapBillItem),
       payments,
     });
   } catch (e) {

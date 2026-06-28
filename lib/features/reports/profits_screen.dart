@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/api/api_errors.dart';
 import '../../core/constants/strings_ar.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_widgets.dart';
@@ -22,8 +23,9 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
   int _month = DateTime.now().month;
   ProfitReport? _report;
   bool _loading = false;
+  String? _loadError;
 
-  final _numberFormat = NumberFormat('#,##0', 'ar');
+  final _numberFormat = NumberFormat('#,##0.##', 'ar');
 
   static const _monthNames = [
     'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
@@ -37,24 +39,35 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final report = await ref.read(reportsServiceProvider).getProfits(
             period: _period,
             year: _year,
             month: _period == 'monthly' ? _month : null,
           );
-      setState(() => _report = report);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(StringsAr.error)),
-        );
-      }
+      if (!mounted) return;
+      setState(() {
+        _report = report;
+        _loadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadError = formatAppError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  String _syp(double amount) =>
+      '${_numberFormat.format(amount)} ${StringsAr.syp}';
+
+  String _usd(double amount) =>
+      '${_numberFormat.format(amount)} ${StringsAr.usd}';
 
   @override
   Widget build(BuildContext context) {
@@ -138,7 +151,16 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
           Expanded(
             child: _loading
                 ? const AppLoading()
-                : _report == null
+                : _loadError != null
+                    ? EmptyState(
+                        icon: Icons.cloud_off_outlined,
+                        title: _loadError!,
+                        action: FilledButton(
+                          onPressed: _load,
+                          child: const Text(StringsAr.retry),
+                        ),
+                      )
+                    : _report == null
                     ? const EmptyState(
                         icon: Icons.bar_chart_rounded,
                         title: StringsAr.noData,
@@ -150,31 +172,65 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
     );
   }
 
+  Widget _buildDualMetric({
+    required String title,
+    required CurrencyTotals syp,
+    required CurrencyTotals usd,
+    required IconData icon,
+    required Color color,
+    required double Function(CurrencyTotals) pick,
+    Color? backgroundColor,
+  }) {
+    return StatMetricCard(
+      title: title,
+      value: _syp(pick(syp)),
+      secondaryValue: _usd(pick(usd)),
+      icon: icon,
+      color: color,
+      backgroundColor: backgroundColor,
+    );
+  }
+
   Widget _buildReport(ProfitReport report) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        StatMetricCard(
-          title: StringsAr.incoming,
-          value: '${_numberFormat.format(report.incoming)} ${StringsAr.syp}',
-          icon: Icons.trending_up_rounded,
-          color: AppColors.success,
-          backgroundColor: AppColors.successSoft,
+        _buildDualMetric(
+          title: 'إجمالي المبيعات (فواتير)',
+          syp: report.syp,
+          usd: report.usd,
+          icon: Icons.receipt_long_rounded,
+          color: AppColors.primary,
+          pick: (t) => t.incoming,
         ),
         const SizedBox(height: 12),
-        StatMetricCard(
+        _buildDualMetric(
+          title: 'التحصيل النقدي (دفعات)',
+          syp: report.syp,
+          usd: report.usd,
+          icon: Icons.payments_rounded,
+          color: AppColors.success,
+          backgroundColor: AppColors.successSoft,
+          pick: (t) => t.collected,
+        ),
+        const SizedBox(height: 12),
+        _buildDualMetric(
           title: StringsAr.outgoing,
-          value: '${_numberFormat.format(report.outgoing)} ${StringsAr.syp}',
+          syp: report.syp,
+          usd: report.usd,
           icon: Icons.trending_down_rounded,
           color: AppColors.error,
           backgroundColor: AppColors.errorSoft,
+          pick: (t) => t.outgoing,
         ),
         const SizedBox(height: 12),
-        StatMetricCard(
+        _buildDualMetric(
           title: StringsAr.profit,
-          value: '${_numberFormat.format(report.profit)} ${StringsAr.syp}',
+          syp: report.syp,
+          usd: report.usd,
           icon: Icons.account_balance_wallet_rounded,
           color: AppColors.info,
+          pick: (t) => t.profit,
         ),
         const SizedBox(height: 12),
         StatMetricCard(
@@ -194,14 +250,14 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
           ),
           const SizedBox(height: 12),
           ...report.breakdown.map((row) {
-            if (row.billCount == 0) return const SizedBox.shrink();
+            if (row.billCount == 0 && row.syp.collected == 0 && row.usd.collected == 0) return const SizedBox.shrink();
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: ListItemCard(
                 title: _monthNames[row.month - 1],
                 subtitle:
-                    '${StringsAr.incoming}: ${_numberFormat.format(row.incoming)}  •  '
-                    '${StringsAr.profit}: ${_numberFormat.format(row.profit)}',
+                    'التحصيل: ${_syp(row.syp.collected)} / ${_usd(row.usd.collected)}\n'
+                    'الأرباح: ${_syp(row.syp.profit)} / ${_usd(row.usd.profit)}',
                 trailing: Text(
                   '${row.billCount} فاتورة',
                   style: GoogleFonts.cairo(

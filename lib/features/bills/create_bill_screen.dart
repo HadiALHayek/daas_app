@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/strings_ar.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_widgets.dart';
+import '../../core/widgets/arabic_text_field.dart';
 import '../../models/bill.dart';
 import '../../models/customer.dart';
 import '../../models/item.dart';
@@ -14,9 +15,16 @@ import '../../services/pdf_service.dart';
 import '../../services/services.dart';
 
 class _DraftLine {
-  _DraftLine({required this.catalogItem, required this.quantity});
+  _DraftLine({
+    required this.catalogItem,
+    required this.quantity,
+    required this.unitPrice,
+  });
+
   final CatalogItem catalogItem;
   double quantity;
+  double unitPrice;
+  bool priceEdited = false;
 }
 
 class CreateBillScreen extends ConsumerStatefulWidget {
@@ -30,8 +38,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   List<Customer>? _customers;
   List<CatalogItem>? _catalog;
   Customer? _selectedCustomer;
+  double _exchangeRate = 15000;
   String _currency = 'SYP';
   final List<_DraftLine> _lines = [];
+  final _discountController = TextEditingController(text: '0');
   bool _loading = true;
   bool _saving = false;
   String? _loadError;
@@ -41,10 +51,20 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   @override
   void initState() {
     super.initState();
+    _discountController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _load();
   }
 
+  @override
+  void dispose() {
+    _discountController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _loadError = null;
@@ -52,20 +72,35 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     try {
       final customers = await ref.read(customersServiceProvider).getCustomers();
       final catalog = await ref.read(itemsServiceProvider).getItems();
+      final rate = await ref.read(exchangeRateServiceProvider).getRate();
+      if (!mounted) return;
       setState(() {
         _customers = customers;
         _catalog = catalog;
+        _exchangeRate = rate;
       });
     } catch (_) {
-      if (mounted) {
-        setState(() => _loadError = StringsAr.error);
-      }
+      if (!mounted) return;
+      setState(() => _loadError = StringsAr.error);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _addLine() {
+  String get _currencyLabel => _currency == 'SYP' ? StringsAr.syp : StringsAr.usd;
+
+  double _convertPrice(double amount, String fromCurrency) {
+    if (fromCurrency == _currency) return amount;
+    if (fromCurrency == 'USD' && _currency == 'SYP') {
+      return amount * _exchangeRate;
+    }
+    if (fromCurrency == 'SYP' && _currency == 'USD') {
+      return amount / _exchangeRate;
+    }
+    return amount;
+  }
+
+  void _addLines() {
     if (_catalog == null || _catalog!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('أضف أصنافاً أولاً من إدارة الأصناف')),
@@ -73,24 +108,42 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       return;
     }
 
-    CatalogItem? selected = _catalog!.first;
+    final selected = <CatalogItem>{};
+
     showDialog<void>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text(StringsAr.selectItem),
-              content: DropdownButtonFormField<CatalogItem>(
-                initialValue: selected,
-                items: _catalog!
-                    .map((item) => DropdownMenuItem(
-                          value: item,
-                          child: Text(item.name),
-                        ))
-                    .toList(),
-                onChanged: (v) => setDialogState(() => selected = v),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text('اختر أصنافاً (يمكن اختيار أكثر من واحد)'),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 360,
+                child: ListView(
+                  children: _catalog!.map((item) {
+                    return CheckboxListTile(
+                      title: Text(item.name),
+                      subtitle: Text(
+                        '${_priceFormat.format(item.sellPrice)} '
+                        '${item.currency == 'SYP' ? StringsAr.syp : StringsAr.usd}',
+                      ),
+                      value: selected.contains(item),
+                      onChanged: (checked) {
+                        setDialogState(() {
+                          if (checked == true) {
+                            selected.add(item);
+                          } else {
+                            selected.remove(item);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
               ),
               actions: [
                 TextButton(
@@ -98,18 +151,32 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                   child: const Text(StringsAr.cancel),
                 ),
                 FilledButton(
-                  onPressed: () {
-                    if (selected != null) {
-                      setState(() {
-                        _lines.add(_DraftLine(
-                          catalogItem: selected!,
-                          quantity: 1,
-                        ));
-                      });
-                    }
-                    Navigator.pop(context);
-                  },
-                  child: const Text(StringsAr.add),
+                  onPressed: selected.isEmpty
+                      ? null
+                      : () {
+                          setState(() {
+                            for (final item in selected) {
+                              final alreadyAdded = _lines.any(
+                                (line) => line.catalogItem.id == item.id,
+                              );
+                              if (!alreadyAdded) {
+                                final convertedPrice = _convertPrice(
+                                  item.sellPrice,
+                                  item.currency,
+                                );
+                                _lines.add(
+                                  _DraftLine(
+                                    catalogItem: item,
+                                    quantity: 1,
+                                    unitPrice: convertedPrice,
+                                  )..priceEdited = item.currency != _currency,
+                                );
+                              }
+                            }
+                          });
+                          Navigator.pop(context);
+                        },
+                  child: Text('${StringsAr.add} (${selected.length})'),
                 ),
               ],
             );
@@ -121,10 +188,19 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
   double get _subtotal => _lines.fold(
         0,
-        (sum, line) => sum + line.catalogItem.sellPrice * line.quantity,
+        (sum, line) => sum + line.unitPrice * line.quantity,
       );
 
-  Future<void> _saveAndPrint() async {
+  double get _discount {
+    final value = double.tryParse(_discountController.text) ?? 0;
+    return value < 0 ? 0 : value;
+  }
+
+  double get _total =>
+      double.parse(((_subtotal - _discount).clamp(0, double.infinity))
+          .toStringAsFixed(2));
+
+  Future<void> _saveBill({required bool payImmediately}) async {
     if (_selectedCustomer == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(StringsAr.selectCustomer)),
@@ -134,6 +210,18 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     if (_lines.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('أضف صنفاً واحداً على الأقل')),
+      );
+      return;
+    }
+    if (_discount > _subtotal) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الخصم أكبر من المجموع الفرعي')),
+      );
+      return;
+    }
+    if (_total <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('إجمالي الفاتورة يجب أن يكون أكبر من صفر')),
       );
       return;
     }
@@ -147,8 +235,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
               itemId: line.catalogItem.id,
               itemName: line.catalogItem.name,
               quantity: line.quantity,
-              unitSellPrice: line.catalogItem.sellPrice,
-              totalSell: line.catalogItem.sellPrice * line.quantity,
+              unitSellPrice: line.unitPrice,
+              totalSell: line.unitPrice * line.quantity,
+              priceOverride: line.priceEdited,
             ),
           )
           .toList();
@@ -157,27 +246,16 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             customerId: _selectedCustomer!.id,
             currency: _currency,
             items: items,
+            discount: _discount,
+            initialPayment: payImmediately ? _total : null,
           );
 
       if (!mounted) return;
 
-      try {
-        await pdfService.printBill(bill);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                e is Exception
-                    ? 'تم حفظ الفاتورة. فشلت الطباعة: ${e.toString().replaceFirst('Exception: ', '')}'
-                    : 'تم حفظ الفاتورة لكن فشلت الطباعة',
-              ),
-            ),
-          );
-        }
-      }
-
-      if (mounted) context.pushReplacement('/bills/${bill.id}');
+      // Navigate to detail screen. If payImmediately is true, add query param to trigger auto-print.
+      final billId = bill.id;
+      final path = payImmediately ? '/bills/$billId?print=true' : '/bills/$billId';
+      context.pushReplacement(path);
     } catch (e) {
       if (mounted) {
         final message = e is Exception
@@ -190,6 +268,25 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _editLinePrice(int index) async {
+    final line = _lines[index];
+    
+    final newPrice = await showDialog<double>(
+      context: context,
+      builder: (context) => _EditPriceDialog(
+        itemName: line.catalogItem.name,
+        initialPrice: line.unitPrice,
+      ),
+    );
+
+    if (newPrice == null || !mounted) return;
+
+    setState(() {
+      line.unitPrice = newPrice;
+      line.priceEdited = true;
+    });
   }
 
   @override
@@ -218,168 +315,248 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             _buildCustomerDropdown(),
                             const SizedBox(height: 16),
                             _buildCurrencyDropdown(),
+                            if (_currency == 'SYP') ...[
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  const Icon(Icons.info_outline, size: 16, color: AppColors.textSecondary),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'سعر الصرف المعتمد: 1 \$ = ${_priceFormat.format(_exchangeRate)} ل.س',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
-                  const SizedBox(height: 16),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'أصناف الفاتورة',
-                          style: GoogleFonts.cairo(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton.tonalIcon(
-                        onPressed: _addLine,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 40),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
-                        icon: const Icon(Icons.add_rounded, size: 20),
-                        label: const Text(StringsAr.addItem),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (_lines.isEmpty)
-                    const EmptyState(
-                      compact: true,
-                      icon: Icons.shopping_cart_outlined,
-                      title: 'لا توجد أصناف',
-                      subtitle: 'اضغط إضافة صنف لبدء الفاتورة',
-                    )
-                  else
-                    ..._lines.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final line = entry.value;
-                      final lineTotal =
-                          line.catalogItem.sellPrice * line.quantity;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        line.catalogItem.name,
-                                        style: GoogleFonts.cairo(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.delete_outline_rounded,
-                                        color: AppColors.error,
-                                      ),
-                                      onPressed: () =>
-                                          setState(() => _lines.removeAt(index)),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    _QtyButton(
-                                      icon: Icons.remove_rounded,
-                                      onPressed: line.quantity > 1
-                                          ? () => setState(() => line.quantity--)
-                                          : null,
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      child: Text(
-                                        line.quantity.toStringAsFixed(0),
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                    _QtyButton(
-                                      icon: Icons.add_rounded,
-                                      onPressed: () =>
-                                          setState(() => line.quantity++),
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      '${_priceFormat.format(lineTotal)} '
-                                      '${line.catalogItem.currency == 'SYP' ? StringsAr.syp : StringsAr.usd}',
-                                      style: GoogleFonts.cairo(
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  if (_lines.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    SectionCard(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      const SizedBox(height: 16),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            StringsAr.subtotal,
-                            style: GoogleFonts.cairo(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
+                          Expanded(
+                            child: Text(
+                              'أصناف الفاتورة',
+                              style: GoogleFonts.cairo(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
-                          Text(
-                            _priceFormat.format(_subtotal),
-                            style: GoogleFonts.cairo(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary,
+                          const SizedBox(width: 8),
+                          FilledButton.tonalIcon(
+                            onPressed: _addLines,
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 40),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
                             ),
+                            icon: const Icon(Icons.add_rounded, size: 20),
+                            label: const Text(StringsAr.addItem),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _saving ? null : _saveAndPrint,
-                      icon: _saving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: Colors.white,
+                      const SizedBox(height: 10),
+                      if (_lines.isEmpty)
+                        const EmptyState(
+                          compact: true,
+                          icon: Icons.shopping_cart_outlined,
+                          title: 'لا توجد أصناف',
+                          subtitle: 'اضغط إضافة صنف لبدء الفاتورة',
+                        )
+                      else
+                        ..._lines.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final line = entry.value;
+                          final lineTotal = line.unitPrice * line.quantity;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            line.catalogItem.name,
+                                            style: GoogleFonts.cairo(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.edit_outlined,
+                                            color: AppColors.primary,
+                                          ),
+                                          tooltip: 'تعديل السعر',
+                                          onPressed: () =>
+                                              _editLinePrice(index),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.delete_outline_rounded,
+                                            color: AppColors.error,
+                                          ),
+                                          onPressed: () => setState(
+                                            () => _lines.removeAt(index),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Text(
+                                      '${StringsAr.unitPrice}: '
+                                      '${_priceFormat.format(line.unitPrice)} $_currencyLabel',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 13,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        _QtyButton(
+                                          icon: Icons.remove_rounded,
+                                          onPressed: line.quantity > 1
+                                              ? () => setState(
+                                                    () => line.quantity--,
+                                                  )
+                                              : null,
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                          child: Text(
+                                            line.quantity.toStringAsFixed(0),
+                                            style: GoogleFonts.cairo(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                        _QtyButton(
+                                          icon: Icons.add_rounded,
+                                          onPressed: () =>
+                                              setState(() => line.quantity++),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          '${_priceFormat.format(lineTotal)} $_currencyLabel',
+                                          style: GoogleFonts.cairo(
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
-                            )
-                          : const Icon(Icons.receipt_long_rounded),
-                      label: Text(
-                        _saving ? StringsAr.loading : StringsAr.createBill,
+                            ),
+                          );
+                        }),
+                      if (_lines.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        SectionCard(
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    StringsAr.subtotal,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${_priceFormat.format(_subtotal)} $_currencyLabel',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              NumberTextField(
+                                controller: _discountController,
+                                label: StringsAr.discount,
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    StringsAr.total,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${_priceFormat.format(_total)} $_currencyLabel',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _saving
+                              ? null
+                              : () => _saveBill(payImmediately: false),
+                          icon: _saving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.receipt_long_rounded),
+                          label: Text(
+                            _saving ? StringsAr.loading : StringsAr.createBill,
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: _saving || _lines.isEmpty
+                              ? null
+                              : () => _saveBill(payImmediately: true),
+                          icon: const Icon(Icons.payments_rounded),
+                          label: const Text(StringsAr.payCashNow),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
     );
   }
 
@@ -429,10 +606,80 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             DropdownMenuItem(value: 'USD', child: Text(StringsAr.usd)),
           ],
           onChanged: (v) {
-            if (v != null) setState(() => _currency = v);
+            if (v != null && v != _currency) {
+              final oldCurrency = _currency;
+              setState(() {
+                _currency = v;
+                // Convert existing lines to the new currency
+                for (final line in _lines) {
+                  if (v == 'SYP' && oldCurrency == 'USD') {
+                    line.unitPrice *= _exchangeRate;
+                  } else if (v == 'USD' && oldCurrency == 'SYP') {
+                    line.unitPrice /= _exchangeRate;
+                  }
+                  // When switching currency, we mark as edited so the converted price is sent to the API
+                  line.priceEdited = true;
+                }
+              });
+            }
           },
         ),
       ),
+    );
+  }
+}
+
+class _EditPriceDialog extends StatefulWidget {
+  const _EditPriceDialog({
+    required this.itemName,
+    required this.initialPrice,
+  });
+
+  final String itemName;
+  final double initialPrice;
+
+  @override
+  State<_EditPriceDialog> createState() => _EditPriceDialogState();
+}
+
+class _EditPriceDialogState extends State<_EditPriceDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialPrice.toString());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('تعديل سعر: ${widget.itemName}'),
+      content: NumberTextField(
+        controller: _controller,
+        label: StringsAr.unitPrice,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text(StringsAr.cancel),
+        ),
+        FilledButton(
+          onPressed: () {
+            final price = double.tryParse(_controller.text);
+            if (price == null || price < 0) return;
+            Navigator.pop(context, price);
+          },
+          child: const Text(StringsAr.save),
+        ),
+      ],
     );
   }
 }

@@ -61,7 +61,12 @@ class StringsAr {
   static const year = 'السنة';
   static const month = 'الشهر';
   static const usdToSyp = '1 دولار = ___ ليرة سورية';
-  static const factoryName = 'مصنع الأثاث';
+  static const factoryName = 'Al Tayr';
+  static const factoryPhone = '0933313866 , 0962329179';
+  static const address = 'العنوان';
+  static const discount = 'الخصم';
+  static const payCashNow = 'دفع نقدي فوراً';
+  static const editBill = 'تعديل الفاتورة';
   static const noData = 'لا توجد بيانات';
   static const loading = 'جاري التحميل...';
   static const retry = 'إعادة المحاولة';

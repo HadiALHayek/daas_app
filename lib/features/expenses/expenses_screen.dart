@@ -34,14 +34,17 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _loadError = null;
     });
     try {
       final expenses = await ref.read(expensesServiceProvider).getExpenses();
+      if (!mounted) return;
       setState(() => _expenses = expenses);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _loadError = formatAppError(e));
     } finally {
       if (mounted) setState(() => _loading = false);

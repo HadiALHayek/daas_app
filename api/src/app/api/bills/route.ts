@@ -22,66 +22,35 @@ export async function POST(request: NextRequest) {
     const currency = body?.currency;
     const seller_signature = body?.seller_signature ?? body?.sellerSignature ?? "";
     const items = body?.items;
+    const discount = Math.max(0, Number(body?.discount ?? 0));
+    const initial_payment = body?.initial_payment ?? body?.initialPayment ?? body?.amount_paid ?? null;
 
-    if (!customer_id) {
-      return Response.json({ error: "العميل مطلوب" }, { status: 400 });
-    }
-    if (!currency) {
-      return Response.json({ error: "العملة مطلوبة" }, { status: 400 });
-    }
-    if (!Array.isArray(items) || items.length === 0) {
-      return Response.json({ error: "أضف صنفاً واحداً على الأقل" }, { status: 400 });
-    }
-
-    if (!["SYP", "USD"].includes(currency)) {
-      return Response.json({ error: "عملة غير صالحة" }, { status: 400 });
+    if (!customer_id || !currency || !Array.isArray(items) || items.length === 0) {
+      return Response.json({ error: "البيانات غير مكتملة" }, { status: 400 });
     }
 
     const supabase = getAdminClient();
 
+    // 1. Get Exchange Rate
     let rate = 15000;
-    const { data: settings, error: settingsError } = await supabase
-      .from("settings")
-      .select("usd_to_syp")
-      .eq("id", 1)
-      .maybeSingle();
+    const { data: settings } = await supabase.from("settings").select("usd_to_syp").eq("id", 1).maybeSingle();
+    if (settings) rate = Number(settings.usd_to_syp);
 
-    if (settingsError) return serverError(settingsError.message);
-
-    if (settings) {
-      rate = Number(settings.usd_to_syp);
-    } else {
-      const { error: seedError } = await supabase
-        .from("settings")
-        .upsert({ id: 1, usd_to_syp: rate });
-      if (seedError) return serverError(seedError.message);
-    }
+    // 2. Process Items
     const processedItems = [];
-
     for (const line of items as BillLineInput[]) {
       let unitSell = Number(line.unit_sell_price ?? 0);
-      const itemCurrency = line.item_currency ?? currency;
+      let unitCost = 0;
+      const hasPriceOverride = line.unit_sell_price != null && Number(line.unit_sell_price) > 0;
 
       if (line.item_id) {
-        const { data: catalogItem, error: itemError } = await supabase
-          .from("items")
-          .select("*")
-          .eq("id", line.item_id)
-          .single();
-
-        if (itemError || !catalogItem) {
-          return Response.json(
-            { error: `الصنف غير موجود: ${line.item_name}` },
-            { status: 400 }
-          );
+        const { data: catalogItem } = await supabase.from("items").select("*").eq("id", line.item_id).single();
+        if (catalogItem) {
+          if (!hasPriceOverride) {
+            unitSell = await convertToBillCurrency(Number(catalogItem.sell_price), catalogItem.currency, currency, rate);
+          }
+          unitCost = await convertToBillCurrency(Number(catalogItem.cost), catalogItem.currency, currency, rate);
         }
-
-        unitSell = await convertToBillCurrency(
-          Number(catalogItem.sell_price),
-          catalogItem.currency,
-          currency,
-          rate
-        );
       }
 
       const quantity = Number(line.quantity) || 1;
@@ -90,15 +59,16 @@ export async function POST(request: NextRequest) {
         item_name: line.item_name,
         quantity,
         unit_sell_price: unitSell,
-        total_sell: unitSell * quantity,
-        unit_item_cost: 0,
-        total_item_cost: 0,
+        total_sell: Number((unitSell * quantity).toFixed(2)),
+        unit_item_cost: unitCost,
+        total_item_cost: Number((unitCost * quantity).toFixed(2)),
       });
     }
 
     const subtotal = processedItems.reduce((sum, i) => sum + i.total_sell, 0);
-    const total = subtotal;
+    const total = Number((subtotal - discount).toFixed(2));
 
+    // 3. Insert Bill
     const { data: bill, error: billError } = await supabase
       .from("bills")
       .insert({
@@ -106,49 +76,59 @@ export async function POST(request: NextRequest) {
         currency,
         usd_to_syp_rate: rate,
         subtotal,
+        discount,
         total,
-        seller_signature: seller_signature ?? '',
+        seller_signature: seller_signature || "manual",
       })
-      .select(
-        `
-        *,
-        customers ( id, name, phone )
-      `
-      )
+      .select()
       .single();
 
     if (billError) return serverError(billError.message);
 
-    const billItems = processedItems.map((item) => ({
-      ...item,
-      bill_id: bill.id,
-    }));
+    // 4. Insert Items
+    await supabase.from("bill_items").insert(processedItems.map(i => ({ ...i, bill_id: bill.id })));
 
-    const { data: insertedItems, error: itemsError } = await supabase
-      .from("bill_items")
-      .insert(billItems)
-      .select();
+    // 5. Insert Payment if provided
+    const paymentAmount = initial_payment != null ? Number(Number(initial_payment).toFixed(2)) : null;
+    if (paymentAmount != null && paymentAmount > 0) {
+      await supabase.from("bill_payments").insert({
+        bill_id: bill.id,
+        amount: Math.min(paymentAmount, total), // Cap at total just in case
+        notes: "دفع نقدي فوراً",
+      });
+    }
 
-    if (itemsError) return serverError(itemsError.message);
+    // 6. Fresh Fetch: Get the complete bill state from DB (exactly what GET returns)
+    const { data: finalBill, error: fetchError } = await supabase
+      .from("bills")
+      .select("*, customers(*), bill_items(*), bill_payments(*)")
+      .eq("id", bill.id)
+      .single();
 
-    return Response.json(
-      {
-        ...bill,
-        usd_to_syp_rate: Number(bill.usd_to_syp_rate),
-        subtotal: Number(bill.subtotal),
-        total: Number(bill.total),
-        items: (insertedItems ?? []).map((i) => ({
-          ...i,
-          quantity: Number(i.quantity),
-          unit_sell_price: Number(i.unit_sell_price),
-          total_sell: Number(i.total_sell),
-          unit_item_cost: Number(i.unit_item_cost),
-          total_item_cost: Number(i.total_item_cost),
-        })),
-      },
-      { status: 201 }
-    );
+    if (fetchError || !finalBill) return serverError("فشل استرجاع البيانات المحدثة");
+
+    // 7. Standardize numeric fields for JSON
+    const payments = (finalBill.bill_payments ?? []).map((p: any) => ({ ...p, amount: Number(p.amount) }));
+    const amountPaid = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
+
+    return Response.json({
+      ...finalBill,
+      usd_to_syp_rate: Number(finalBill.usd_to_syp_rate),
+      subtotal: Number(finalBill.subtotal),
+      discount: Number(finalBill.discount ?? 0),
+      total: Number(finalBill.total),
+      amount_paid: amountPaid,
+      amount_remaining: Number((Number(finalBill.total) - amountPaid).toFixed(2)),
+      items: (finalBill.bill_items ?? []).map((i: any) => ({
+        ...i,
+        quantity: Number(i.quantity),
+        unit_sell_price: Number(i.unit_sell_price),
+        total_sell: Number(i.total_sell),
+      })),
+      payments,
+    }, { status: 201 });
+
   } catch (e) {
-    return serverError(e instanceof Error ? e.message : "خطأ");
+    return serverError(e instanceof Error ? e.message : "خطأ غير متوقع");
   }
 }

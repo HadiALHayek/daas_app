@@ -84,6 +84,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'bills/:id',
             builder: (context, state) => BillDetailScreen(
               billId: state.pathParameters['id']!,
+              shouldPrint: state.uri.queryParameters['print'] == 'true',
             ),
           ),
           GoRoute(

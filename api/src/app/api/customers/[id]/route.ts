@@ -12,7 +12,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   try {
     const body = await request.json();
-    return updateCustomerById(id, body.name, body.phone);
+    return updateCustomerById(id, body.name, body.phone, body.address);
   } catch (e) {
     return serverError(e instanceof Error ? e.message : "خطأ");
   }

@@ -26,6 +26,7 @@ create table if not exists customers (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   phone text,
+  address text,
   created_at timestamptz default now()
 );
 
@@ -37,6 +38,7 @@ create table if not exists bills (
   currency text not null check (currency in ('SYP', 'USD')),
   usd_to_syp_rate numeric not null,
   subtotal numeric not null,
+  discount numeric not null default 0,
   total numeric not null,
   seller_signature text not null,
   created_at timestamptz default now()

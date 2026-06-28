@@ -10,6 +10,7 @@ class ArabicTextField extends StatelessWidget {
     this.validator,
     this.onFieldSubmitted,
     this.textInputAction,
+    this.maxLines = 1,
   });
 
   final TextEditingController controller;
@@ -17,6 +18,7 @@ class ArabicTextField extends StatelessWidget {
   final String? Function(String?)? validator;
   final void Function(String)? onFieldSubmitted;
   final TextInputAction? textInputAction;
+  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +30,7 @@ class ArabicTextField extends StatelessWidget {
       textAlign: TextAlign.right,
       keyboardType: TextInputType.text,
       textInputAction: textInputAction,
+      maxLines: maxLines,
       onFieldSubmitted: onFieldSubmitted,
       validator: validator,
     );

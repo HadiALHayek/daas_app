@@ -26,6 +26,7 @@ class _ExchangeRateScreenState extends ConsumerState<ExchangeRateScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final rate = await ref.read(exchangeRateServiceProvider).getRate();

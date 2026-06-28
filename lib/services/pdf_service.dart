@@ -82,9 +82,20 @@ class PdfService {
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
               pw.Center(
-                child: pw.Text(
-                  StringsAr.factoryName,
-                  style: boldStyle.copyWith(fontSize: 22),
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      StringsAr.factoryName,
+                      style: boldStyle.copyWith(fontSize: 22),
+                    ),
+                    if (StringsAr.factoryPhone.isNotEmpty) ...[
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        '${StringsAr.phone}: ${StringsAr.factoryPhone}',
+                        style: baseStyle.copyWith(fontSize: 12),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               pw.SizedBox(height: 16),
@@ -106,6 +117,16 @@ class PdfService {
                 '${StringsAr.customerName}: ${bill.customerName ?? ''}',
                 style: baseStyle,
               ),
+              if (bill.customerPhone?.isNotEmpty == true)
+                pw.Text(
+                  '${StringsAr.phone}: ${bill.customerPhone}',
+                  style: baseStyle,
+                ),
+              if (bill.customerAddress?.isNotEmpty == true)
+                pw.Text(
+                  '${StringsAr.address}: ${bill.customerAddress}',
+                  style: baseStyle,
+                ),
               pw.SizedBox(height: 20),
               pw.TableHelper.fromTextArray(
                 headers: [
@@ -134,6 +155,24 @@ class PdfService {
                 cellHeight: 32,
               ),
               pw.SizedBox(height: 16),
+              if (bill.discount > 0) ...[
+                pw.Align(
+                  alignment: pw.Alignment.centerLeft,
+                  child: pw.Text(
+                    '${StringsAr.subtotal}: ${numberFormat.format(bill.subtotal)} $currency',
+                    style: baseStyle.copyWith(fontSize: 14),
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Align(
+                  alignment: pw.Alignment.centerLeft,
+                  child: pw.Text(
+                    '${StringsAr.discount}: -${numberFormat.format(bill.discount)} $currency',
+                    style: baseStyle.copyWith(fontSize: 14),
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+              ],
               pw.Align(
                 alignment: pw.Alignment.centerLeft,
                 child: pw.Text(
@@ -141,7 +180,58 @@ class PdfService {
                   style: boldStyle.copyWith(fontSize: 16),
                 ),
               ),
-              pw.Spacer(),
+              pw.SizedBox(height: 8),
+              pw.Align(
+                alignment: pw.Alignment.centerLeft,
+                child: pw.Text(
+                  '${StringsAr.amountPaid}: ${numberFormat.format(bill.amountPaid)} $currency',
+                  style: baseStyle.copyWith(fontSize: 13),
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Align(
+                alignment: pw.Alignment.centerLeft,
+                child: pw.Text(
+                  '${StringsAr.amountRemaining}: ${numberFormat.format(bill.amountRemaining)} $currency',
+                  style: boldStyle.copyWith(fontSize: 13),
+                ),
+              ),
+              if (bill.payments.isNotEmpty) ...[
+                pw.SizedBox(height: 20),
+                pw.Text(
+                  StringsAr.billPayments,
+                  style: boldStyle.copyWith(fontSize: 14),
+                ),
+                pw.SizedBox(height: 8),
+                pw.TableHelper.fromTextArray(
+                  headers: [
+                    StringsAr.paymentDate,
+                    StringsAr.amount,
+                    StringsAr.notes,
+                  ],
+                  data: (List<BillPayment>.from(bill.payments)
+                        ..sort(
+                          (a, b) => a.paymentDate.compareTo(b.paymentDate),
+                        ))
+                      .map(
+                        (payment) => [
+                          dateFormat.format(payment.paymentDate),
+                          '${numberFormat.format(payment.amount)} $currency',
+                          payment.notes ?? '—',
+                        ],
+                      )
+                      .toList(),
+                  headerStyle: boldStyle,
+                  cellStyle: baseStyle,
+                  headerAlignment: pw.Alignment.centerRight,
+                  cellAlignment: pw.Alignment.centerRight,
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColors.grey300,
+                  ),
+                  cellHeight: 28,
+                ),
+              ],
+              pw.SizedBox(height: 24),
               _signaturePlaceholder(baseStyle, boldStyle),
             ],
           );

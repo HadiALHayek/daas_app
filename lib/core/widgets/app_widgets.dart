@@ -221,6 +221,7 @@ class StatMetricCard extends StatelessWidget {
     super.key,
     required this.title,
     required this.value,
+    this.secondaryValue,
     required this.icon,
     required this.color,
     this.backgroundColor,
@@ -228,6 +229,7 @@ class StatMetricCard extends StatelessWidget {
 
   final String title;
   final String value;
+  final String? secondaryValue;
   final IconData icon;
   final Color color;
   final Color? backgroundColor;
@@ -270,6 +272,17 @@ class StatMetricCard extends StatelessWidget {
                       color: AppColors.textPrimary,
                     ),
                   ),
+                  if (secondaryValue != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      secondaryValue!,
+                      style: GoogleFonts.cairo(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

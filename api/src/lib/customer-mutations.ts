@@ -4,7 +4,8 @@ import { getAdminClient } from "@/lib/supabase";
 export async function updateCustomerById(
   id: string,
   name: unknown,
-  phone: unknown
+  phone: unknown,
+  address?: unknown
 ) {
   if (!id) return badRequest("معرف العميل مطلوب");
 
@@ -18,6 +19,7 @@ export async function updateCustomerById(
     .update({
       name: String(name).trim(),
       phone: phone ? String(phone).trim() : null,
+      address: address ? String(address).trim() : null,
     })
     .eq("id", id)
     .select()

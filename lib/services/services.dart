@@ -7,6 +7,7 @@ import '../models/customer.dart';
 import '../models/expense_payment.dart';
 import '../models/item.dart';
 import '../models/profit_report.dart';
+import 'profit_report_builder.dart';
 
 class AuthService {
   AuthService(this._client);
@@ -172,16 +173,37 @@ class BillsService {
     required String customerId,
     required String currency,
     required List<BillItem> items,
+    double discount = 0,
+    double? initialPayment,
   }) async {
     try {
       final payload = {
         'customer_id': customerId,
         'currency': currency,
-        // Non-empty so older API deployments don't reject empty signature
         'seller_signature': 'manual',
+        'discount': discount,
         'items': items.map((i) => i.toCreateJson()).toList(),
+        if (initialPayment != null) 'initial_payment': initialPayment,
       };
       final response = await _client.dio.post('/api/bills', data: payload);
+      return Bill.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<Bill> updateBill({
+    required String billId,
+    double? discount,
+    List<BillItem>? items,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        if (discount != null) 'discount': discount,
+        if (items != null)
+          'items': items.map((i) => i.toUpdateJson()).toList(),
+      };
+      final response = await _client.dio.put('/api/bills/$billId', data: payload);
       return Bill.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw Exception(extractApiError(e));
@@ -282,15 +304,56 @@ class ReportsService {
     required int year,
     int? month,
   }) async {
-    final response = await _client.dio.get(
-      '/api/reports/profits',
-      queryParameters: {
-        'period': period,
-        'year': year,
-        if (month != null) 'month': month,
-      },
+    try {
+      final response = await _client.dio.get(
+        '/api/reports/profits',
+        queryParameters: {
+          'period': period,
+          'year': year,
+          if (month != null) 'month': month,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+
+      if (data['syp'] is Map && data['usd'] is Map) {
+        return ProfitReport.fromJson(data);
+      }
+
+      return _buildProfitsLocally(period: period, year: year, month: month);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<ProfitReport> _buildProfitsLocally({
+    required String period,
+    required int year,
+    int? month,
+  }) async {
+    final expensesResponse = await _client.dio.get('/api/expenses');
+    final expenses = (expensesResponse.data as List)
+        .map((e) => ExpensePayment.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final customersResponse = await _client.dio.get('/api/customers');
+    final customers = customersResponse.data as List;
+
+    final bills = <Bill>[];
+    for (final customer in customers) {
+      final id = (customer as Map<String, dynamic>)['id'] as String;
+      final billsResponse = await _client.dio.get('/api/customers/$id/bills');
+      for (final raw in billsResponse.data as List) {
+        bills.add(Bill.fromJson(raw as Map<String, dynamic>));
+      }
+    }
+
+    return buildProfitReport(
+      period: period,
+      year: year,
+      month: month,
+      bills: bills,
+      expenses: expenses,
     );
-    return ProfitReport.fromJson(response.data as Map<String, dynamic>);
   }
 }
 

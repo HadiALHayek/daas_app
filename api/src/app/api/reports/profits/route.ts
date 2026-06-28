@@ -6,6 +6,7 @@ interface BillRow {
   id: string;
   currency: string;
   created_at: string;
+  total: number;
   bill_items: Array<{ total_sell: number }>;
 }
 
@@ -15,8 +16,15 @@ interface ExpenseRow {
   payment_date: string;
 }
 
+interface PaymentRow {
+  amount: number;
+  payment_date: string;
+  bills: { currency: string };
+}
+
 interface CurrencyTotals {
   incoming: number;
+  collected: number;
   outgoing: number;
   profit: number;
 }
@@ -27,42 +35,49 @@ function currencyKey(currency: string): "SYP" | "USD" {
 
 function sumBillSales(bills: BillRow[]) {
   const incoming = { SYP: 0, USD: 0 };
-
   for (const bill of bills) {
     const key = currencyKey(bill.currency);
-    for (const item of bill.bill_items ?? []) {
-      incoming[key] += Number(item.total_sell);
-    }
+    incoming[key] += Number(bill.total || 0);
   }
-
   return incoming;
+}
+
+function sumPayments(payments: PaymentRow[]) {
+  const collected = { SYP: 0, USD: 0 };
+  for (const p of payments) {
+    const currency = p.bills?.currency || "SYP";
+    const key = currencyKey(currency);
+    collected[key] += Number(p.amount || 0);
+  }
+  return collected;
 }
 
 function sumExpenses(expenses: ExpenseRow[]) {
   const outgoing = { SYP: 0, USD: 0 };
-
   for (const expense of expenses) {
     const key = currencyKey(expense.currency);
-    outgoing[key] += Number(expense.amount);
+    outgoing[key] += Number(expense.amount || 0);
   }
-
   return outgoing;
 }
 
 function buildCurrencyTotals(
   incoming: { SYP: number; USD: number },
+  collected: { SYP: number; USD: number },
   outgoing: { SYP: number; USD: number }
 ): { syp: CurrencyTotals; usd: CurrencyTotals } {
   return {
     syp: {
       incoming: incoming.SYP,
+      collected: collected.SYP,
       outgoing: outgoing.SYP,
-      profit: incoming.SYP - outgoing.SYP,
+      profit: collected.SYP - outgoing.SYP,
     },
     usd: {
       incoming: incoming.USD,
+      collected: collected.USD,
       outgoing: outgoing.USD,
-      profit: incoming.USD - outgoing.USD,
+      profit: collected.USD - outgoing.USD,
     },
   };
 }
@@ -99,17 +114,10 @@ export async function GET(request: NextRequest) {
     const startIso = startDate.toISOString();
     const endIso = endDate.toISOString();
 
-    const [billsResult, expensesResult] = await Promise.all([
+    const [billsResult, expensesResult, paymentsResult] = await Promise.all([
       supabase
         .from("bills")
-        .select(
-          `
-          id,
-          currency,
-          created_at,
-          bill_items ( total_sell )
-        `
-        )
+        .select("id, currency, created_at, total")
         .gte("created_at", startIso)
         .lt("created_at", endIso),
       supabase
@@ -117,16 +125,24 @@ export async function GET(request: NextRequest) {
         .select("amount, currency, payment_date")
         .gte("payment_date", startIso)
         .lt("payment_date", endIso),
+      supabase
+        .from("bill_payments")
+        .select("amount, payment_date, bills(currency)")
+        .gte("payment_date", startIso)
+        .lt("payment_date", endIso),
     ]);
 
     if (billsResult.error) return serverError(billsResult.error.message);
     if (expensesResult.error) return serverError(expensesResult.error.message);
+    if (paymentsResult.error) return serverError(paymentsResult.error.message);
 
     const bills = (billsResult.data ?? []) as BillRow[];
     const expenses = (expensesResult.data ?? []) as ExpenseRow[];
+    const payments = (paymentsResult.data ?? []) as unknown as PaymentRow[];
 
     const totals = buildCurrencyTotals(
       sumBillSales(bills),
+      sumPayments(payments),
       sumExpenses(expenses)
     );
 
@@ -141,6 +157,7 @@ export async function GET(request: NextRequest) {
       for (let m = 1; m <= 12; m++) {
         const mStart = new Date(year, m - 1, 1);
         const mEnd = new Date(year, m, 1);
+
         const monthBills = bills.filter((b) => {
           const d = new Date(b.created_at);
           return d >= mStart && d < mEnd;
@@ -149,10 +166,17 @@ export async function GET(request: NextRequest) {
           const d = new Date(e.payment_date);
           return d >= mStart && d < mEnd;
         });
+        const monthPayments = payments.filter((p) => {
+          const d = new Date(p.payment_date);
+          return d >= mStart && d < mEnd;
+        });
+
         const monthTotals = buildCurrencyTotals(
           sumBillSales(monthBills),
+          sumPayments(monthPayments),
           sumExpenses(monthExpenses)
         );
+
         breakdown.push({
           month: m,
           ...monthTotals,

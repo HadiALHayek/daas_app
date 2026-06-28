@@ -29,20 +29,21 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _loadError = null;
     });
     try {
       final customers = await ref.read(customersServiceProvider).getCustomers();
+      if (!mounted) return;
       setState(() {
         _customers = customers;
         _loadError = null;
       });
     } catch (e) {
-      if (mounted) {
-        setState(() => _loadError = formatAppError(e));
-      }
+      if (!mounted) return;
+      setState(() => _loadError = formatAppError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -54,7 +55,12 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
     try {
       await ref.read(customersServiceProvider).createCustomer(
-            Customer(id: '', name: data.name, phone: data.phone),
+            Customer(
+              id: '',
+              name: data.name,
+              phone: data.phone,
+              address: data.address,
+            ),
           );
       _load();
     } catch (e) {
@@ -82,7 +88,12 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     try {
       await ref.read(customersServiceProvider).updateCustomer(
             customer.id,
-            Customer(id: customer.id, name: data.name, phone: data.phone),
+            Customer(
+              id: customer.id,
+              name: data.name,
+              phone: data.phone,
+              address: data.address,
+            ),
           );
       _load();
     } catch (e) {

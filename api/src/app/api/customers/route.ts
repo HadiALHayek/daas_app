@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, phone } = body;
+    const { name, phone, address } = body;
 
     if (!name) {
       return Response.json({ error: "اسم العميل مطلوب" }, { status: 400 });
@@ -41,7 +41,11 @@ export async function POST(request: NextRequest) {
     const supabase = getAdminClient();
     const { data, error } = await supabase
       .from("customers")
-      .insert({ name, phone: phone ?? null })
+      .insert({
+        name,
+        phone: phone ?? null,
+        address: address ?? null,
+      })
       .select()
       .single();
 
@@ -60,7 +64,7 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const id = customerIdFromRequest(request) ?? body.id;
-    return updateCustomerById(id, body.name, body.phone);
+    return updateCustomerById(id, body.name, body.phone, body.address);
   } catch (e) {
     return serverError(e instanceof Error ? e.message : "خطأ");
   }

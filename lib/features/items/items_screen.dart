@@ -30,17 +30,20 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final items = await ref.read(itemsServiceProvider).getItems();
+      if (!mounted) return;
       setState(() => _items = items);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = StringsAr.error);
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 

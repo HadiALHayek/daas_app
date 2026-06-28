@@ -4,18 +4,82 @@ import '../../core/constants/strings_ar.dart';
 import '../../core/widgets/arabic_text_field.dart';
 import '../../models/customer.dart';
 
+class CustomerFormResult {
+  const CustomerFormResult({required this.name, this.phone, this.address});
+  final String name;
+  final String? phone;
+  final String? address;
+}
+
 /// Shows add/edit customer dialog. Returns updated fields on save, or null if cancelled.
-Future<({String name, String? phone})?> showCustomerFormDialog({
+Future<CustomerFormResult?> showCustomerFormDialog({
   required BuildContext context,
   Customer? customer,
 }) {
-  final nameController = TextEditingController(text: customer?.name ?? '');
-  final phoneController = TextEditingController(text: customer?.phone ?? '');
-  final isEdit = customer != null;
-
-  return showDialog<({String name, String? phone})?>(
+  return showDialog<CustomerFormResult>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => _CustomerFormDialog(customer: customer),
+  );
+}
+
+class _CustomerFormDialog extends StatefulWidget {
+  const _CustomerFormDialog({this.customer});
+  final Customer? customer;
+
+  @override
+  State<_CustomerFormDialog> createState() => _CustomerFormDialogState();
+}
+
+class _CustomerFormDialogState extends State<_CustomerFormDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _addressController;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.customer?.name ?? '');
+    _phoneController = TextEditingController(text: widget.customer?.phone ?? '');
+    _addressController =
+        TextEditingController(text: widget.customer?.address ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_isSubmitting) return;
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+
+    setState(() => _isSubmitting = true);
+    FocusScope.of(context).unfocus();
+
+    Navigator.pop(
+      context,
+      CustomerFormResult(
+        name: name,
+        phone: _phoneController.text.trim().isEmpty
+            ? null
+            : _phoneController.text.trim(),
+        address: _addressController.text.trim().isEmpty
+            ? null
+            : _addressController.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.customer != null;
+
+    return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(isEdit ? StringsAr.editCustomer : StringsAr.addCustomer),
       content: SingleChildScrollView(
@@ -23,13 +87,19 @@ Future<({String name, String? phone})?> showCustomerFormDialog({
           mainAxisSize: MainAxisSize.min,
           children: [
             ArabicTextField(
-              controller: nameController,
+              controller: _nameController,
               label: StringsAr.customerName,
             ),
             const SizedBox(height: 12),
             NumberTextField(
-              controller: phoneController,
+              controller: _phoneController,
               label: StringsAr.phone,
+            ),
+            const SizedBox(height: 12),
+            ArabicTextField(
+              controller: _addressController,
+              label: StringsAr.address,
+              maxLines: 2,
             ),
           ],
         ),
@@ -40,18 +110,10 @@ Future<({String name, String? phone})?> showCustomerFormDialog({
           child: const Text(StringsAr.cancel),
         ),
         FilledButton(
-          onPressed: () {
-            final name = nameController.text.trim();
-            if (name.isEmpty) return;
-            final phone = phoneController.text.trim();
-            Navigator.pop(
-              context,
-              (name: name, phone: phone.isEmpty ? null : phone),
-            );
-          },
+          onPressed: _submit,
           child: const Text(StringsAr.save),
         ),
       ],
-    ),
-  );
+    );
+  }
 }

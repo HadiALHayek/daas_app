@@ -34,13 +34,16 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   }
 
   Future<void> _loadItem() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final items = await ref.read(itemsServiceProvider).getItems();
       final item = items.firstWhere((i) => i.id == widget.itemId);
+      if (!mounted) return;
       _nameController.text = item.name;
       _sellPriceController.text = item.sellPrice.toString();
       _currency = item.currency;
+      setState(() {});
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

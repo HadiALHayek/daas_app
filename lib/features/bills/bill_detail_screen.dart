@@ -10,12 +10,18 @@ import '../../core/widgets/app_widgets.dart';
 import '../../models/bill.dart';
 import '../../services/pdf_service.dart';
 import '../../services/services.dart';
+import 'edit_bill_dialog.dart';
 import 'add_bill_payment_dialog.dart';
 
 class BillDetailScreen extends ConsumerStatefulWidget {
-  const BillDetailScreen({super.key, required this.billId});
+  const BillDetailScreen({
+    super.key,
+    required this.billId,
+    this.shouldPrint = false,
+  });
 
   final String billId;
+  final bool shouldPrint;
 
   @override
   ConsumerState<BillDetailScreen> createState() => _BillDetailScreenState();
@@ -32,10 +38,29 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final bill = await ref.read(billsServiceProvider).getBill(widget.billId);
+      if (!mounted) return;
       setState(() => _bill = bill);
+
+      if (widget.shouldPrint && bill != null) {
+        // Delay slightly to ensure screen transition finishes and UI is rendered
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('جاري تجهيز الفاتورة للطباعة...'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            pdfService.printBill(bill).catchError((e) {
+              debugPrint('Auto-print error: $e');
+            });
+          }
+        });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -47,27 +72,23 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
     }
   }
 
-  Future<void> _addPayment() async {
+  Future<void> _editBill() async {
     final bill = _bill;
-    if (bill == null || bill.isFullyPaid) return;
+    if (bill == null) return;
 
-    final data = await showBillPaymentDialog(
-      context: context,
-      maxAmount: bill.amountRemaining,
-      currencyLabel: bill.currencyLabel,
-    );
+    final data = await showEditBillDialog(context: context, bill: bill);
     if (data == null) return;
 
     try {
-      await ref.read(billsServiceProvider).addBillPayment(
+      await ref.read(billsServiceProvider).updateBill(
             billId: bill.id,
-            amount: data.amount,
-            notes: data.notes,
+            discount: data.discount,
+            items: data.items,
           );
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم تسجيل الدفعة')),
+          const SnackBar(content: Text('تم تحديث الفاتورة')),
         );
       }
     } catch (e) {
@@ -76,6 +97,63 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
           SnackBar(content: Text(formatAppError(e))),
         );
       }
+    }
+  }
+
+  bool _isProcessing = false;
+
+  Future<void> _addPayment() async {
+    if (_isProcessing) return;
+    final bill = _bill;
+    if (bill == null || bill.isFullyPaid) return;
+
+    setState(() => _isProcessing = true);
+    try {
+      final data = await showBillPaymentDialog(
+        context: context,
+        maxAmount: bill.amountRemaining,
+        currencyLabel: bill.currencyLabel,
+      );
+      if (data == null) return;
+
+      await ref.read(billsServiceProvider).addBillPayment(
+            billId: bill.id,
+            amount: data.amount,
+            notes: data.notes,
+          );
+      await _load();
+      if (!mounted || _bill == null) return;
+
+      try {
+        await pdfService.printBill(_bill!);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                e is Exception
+                    ? 'تم تسجيل الدفعة. فشلت الطباعة: ${e.toString().replaceFirst('Exception: ', '')}'
+                    : 'تم تسجيل الدفعة لكن فشلت الطباعة',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تسجيل الدفعة وطباعة الفاتورة')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -121,6 +199,26 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                                     ),
                                   ),
                                 ),
+                                const SizedBox(width: 8),
+                                if (_bill!.isFullyPaid)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.success,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'مدفوعة بالكامل',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
                                 const Spacer(),
                                 CurrencyBadge(currency: _bill!.currency),
                               ],
@@ -137,7 +235,38 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                               label: StringsAr.customerName,
                               value: _bill!.customerName ?? '—',
                             ),
+                            if (_bill!.customerPhone?.isNotEmpty == true) ...[
+                              const SizedBox(height: 10),
+                              _InfoRow(
+                                icon: Icons.phone_outlined,
+                                label: StringsAr.phone,
+                                value: _bill!.customerPhone!,
+                              ),
+                            ],
+                            if (_bill!.customerAddress?.isNotEmpty == true) ...[
+                              const SizedBox(height: 10),
+                              _InfoRow(
+                                icon: Icons.location_on_outlined,
+                                label: StringsAr.address,
+                                value: _bill!.customerAddress!,
+                              ),
+                            ],
                             const Divider(height: 28),
+                            if (_bill!.discount > 0) ...[
+                              _AmountRow(
+                                label: StringsAr.subtotal,
+                                value:
+                                    '${priceFormat.format(_bill!.subtotal)} ${_bill!.currencyLabel}',
+                              ),
+                              const SizedBox(height: 8),
+                              _AmountRow(
+                                label: StringsAr.discount,
+                                value:
+                                    '- ${priceFormat.format(_bill!.discount)} ${_bill!.currencyLabel}',
+                                color: AppColors.success,
+                              ),
+                              const SizedBox(height: 8),
+                            ],
                             _AmountRow(
                               label: StringsAr.total,
                               value:
@@ -235,6 +364,18 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _editBill,
+                              icon: const Icon(Icons.edit_outlined),
+                              label: const Text(StringsAr.editBill),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
                       FilledButton.icon(
                         onPressed: () => pdfService.printBill(_bill!),
                         icon: const Icon(Icons.print_rounded),
