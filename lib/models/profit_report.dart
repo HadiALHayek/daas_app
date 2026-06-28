@@ -2,26 +2,35 @@ class CurrencyTotals {
   const CurrencyTotals({
     required this.incoming,
     required this.collected,
+    required this.uncollected,
     required this.outgoing,
     required this.profit,
   });
 
   final double incoming;
   final double collected;
+  final double uncollected;
   final double outgoing;
   final double profit;
 
   factory CurrencyTotals.fromJson(Map<String, dynamic> json) {
+    final incoming = (json['incoming'] as num).toDouble();
     return CurrencyTotals(
-      incoming: (json['incoming'] as num).toDouble(),
-      collected: (json['collected'] as num?)?.toDouble() ?? 
-                 (json['incoming'] as num).toDouble(), // fallback to incoming if missing
+      incoming: incoming,
+      collected: (json['collected'] as num?)?.toDouble() ?? incoming,
+      uncollected: (json['uncollected'] as num?)?.toDouble() ?? 0,
       outgoing: (json['outgoing'] as num).toDouble(),
       profit: (json['profit'] as num).toDouble(),
     );
   }
 
-  static const zero = CurrencyTotals(incoming: 0, collected: 0, outgoing: 0, profit: 0);
+  static const zero = CurrencyTotals(
+    incoming: 0,
+    collected: 0,
+    uncollected: 0,
+    outgoing: 0,
+    profit: 0,
+  );
 }
 
 class ProfitBreakdown {

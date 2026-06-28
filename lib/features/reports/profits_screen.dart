@@ -215,6 +215,16 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
         ),
         const SizedBox(height: 12),
         _buildDualMetric(
+          title: 'المبالغ المتبقية (ديون)',
+          syp: report.syp,
+          usd: report.usd,
+          icon: Icons.pending_actions_rounded,
+          color: AppColors.warning,
+          backgroundColor: AppColors.accentSoft,
+          pick: (t) => t.uncollected,
+        ),
+        const SizedBox(height: 12),
+        _buildDualMetric(
           title: StringsAr.outgoing,
           syp: report.syp,
           usd: report.usd,
@@ -257,6 +267,7 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
                 title: _monthNames[row.month - 1],
                 subtitle:
                     'التحصيل: ${_syp(row.syp.collected)} / ${_usd(row.usd.collected)}\n'
+                    'المتبقي: ${_syp(row.syp.uncollected)} / ${_usd(row.usd.uncollected)}\n'
                     'الأرباح: ${_syp(row.syp.profit)} / ${_usd(row.usd.profit)}',
                 trailing: Text(
                   '${row.billCount} فاتورة',

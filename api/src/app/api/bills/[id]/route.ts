@@ -8,7 +8,7 @@ import {
 } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
 
-type RouteContext = { params: Promise<{ id: string }> };
+type RouteContext = { params: { id: string } };
 
 function mapBillItem(i: Record<string, unknown>) {
   return {
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const userId = await verifyAuth(request);
   if (!userId) return unauthorized();
 
-  const { id } = await context.params;
+  const id = context.params.id;
 
   try {
     const supabase = getAdminClient();
@@ -90,7 +90,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const userId = await verifyAuth(request);
   if (!userId) return unauthorized();
 
-  const { id } = await context.params;
+  const id = context.params.id;
 
   try {
     const body = await request.json();
@@ -187,7 +187,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   const userId = await verifyAuth(request);
   if (!userId) return unauthorized();
 
-  const { id } = await context.params;
+  const id = context.params.id;
 
   try {
     const supabase = getAdminClient();

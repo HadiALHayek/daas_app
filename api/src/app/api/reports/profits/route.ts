@@ -7,7 +7,7 @@ interface BillRow {
   currency: string;
   created_at: string;
   total: number;
-  bill_items: Array<{ total_sell: number }>;
+  bill_payments: Array<{ amount: number }>;
 }
 
 interface ExpenseRow {
@@ -25,6 +25,7 @@ interface PaymentRow {
 interface CurrencyTotals {
   incoming: number;
   collected: number;
+  uncollected: number;
   outgoing: number;
   profit: number;
 }
@@ -35,11 +36,20 @@ function currencyKey(currency: string): "SYP" | "USD" {
 
 function sumBillSales(bills: BillRow[]) {
   const incoming = { SYP: 0, USD: 0 };
+  const uncollected = { SYP: 0, USD: 0 };
+
   for (const bill of bills) {
     const key = currencyKey(bill.currency);
-    incoming[key] += Number(bill.total || 0);
+    const total = Number(bill.total || 0);
+    const paid = (bill.bill_payments || []).reduce(
+      (sum, p) => sum + Number(p.amount),
+      0
+    );
+
+    incoming[key] += total;
+    uncollected[key] += Math.max(0, total - paid);
   }
-  return incoming;
+  return { incoming, uncollected };
 }
 
 function sumPayments(payments: PaymentRow[]) {
@@ -64,18 +74,21 @@ function sumExpenses(expenses: ExpenseRow[]) {
 function buildCurrencyTotals(
   incoming: { SYP: number; USD: number },
   collected: { SYP: number; USD: number },
+  uncollected: { SYP: number; USD: number },
   outgoing: { SYP: number; USD: number }
 ): { syp: CurrencyTotals; usd: CurrencyTotals } {
   return {
     syp: {
       incoming: incoming.SYP,
       collected: collected.SYP,
+      uncollected: uncollected.SYP,
       outgoing: outgoing.SYP,
       profit: collected.SYP - outgoing.SYP,
     },
     usd: {
       incoming: incoming.USD,
       collected: collected.USD,
+      uncollected: uncollected.USD,
       outgoing: outgoing.USD,
       profit: collected.USD - outgoing.USD,
     },
@@ -117,7 +130,7 @@ export async function GET(request: NextRequest) {
     const [billsResult, expensesResult, paymentsResult] = await Promise.all([
       supabase
         .from("bills")
-        .select("id, currency, created_at, total")
+        .select("id, currency, created_at, total, bill_payments(amount)")
         .gte("created_at", startIso)
         .lt("created_at", endIso),
       supabase
@@ -136,13 +149,15 @@ export async function GET(request: NextRequest) {
     if (expensesResult.error) return serverError(expensesResult.error.message);
     if (paymentsResult.error) return serverError(paymentsResult.error.message);
 
-    const bills = (billsResult.data ?? []) as BillRow[];
+    const bills = (billsResult.data ?? []) as unknown as BillRow[];
     const expenses = (expensesResult.data ?? []) as ExpenseRow[];
     const payments = (paymentsResult.data ?? []) as unknown as PaymentRow[];
 
+    const salesStats = sumBillSales(bills);
     const totals = buildCurrencyTotals(
-      sumBillSales(bills),
+      salesStats.incoming,
       sumPayments(payments),
+      salesStats.uncollected,
       sumExpenses(expenses)
     );
 
@@ -171,9 +186,11 @@ export async function GET(request: NextRequest) {
           return d >= mStart && d < mEnd;
         });
 
+        const mSales = sumBillSales(monthBills);
         const monthTotals = buildCurrencyTotals(
-          sumBillSales(monthBills),
+          mSales.incoming,
           sumPayments(monthPayments),
+          mSales.uncollected,
           sumExpenses(monthExpenses)
         );
 
