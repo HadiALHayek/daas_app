@@ -182,3 +182,21 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return serverError(e instanceof Error ? e.message : "خطأ");
   }
 }
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const userId = await verifyAuth(request);
+  if (!userId) return unauthorized();
+
+  const { id } = await context.params;
+
+  try {
+    const supabase = getAdminClient();
+    const { error } = await supabase.from("bills").delete().eq("id", id);
+
+    if (error) return serverError(error.message);
+
+    return Response.json({ success: true });
+  } catch (e) {
+    return serverError(e instanceof Error ? e.message : "خطأ");
+  }
+}

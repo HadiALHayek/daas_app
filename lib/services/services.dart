@@ -237,6 +237,14 @@ class BillsService {
       throw Exception(extractApiError(e));
     }
   }
+
+  Future<void> deleteBill(String id) async {
+    try {
+      await _client.dio.delete('/api/bills/$id');
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
 }
 
 final billsServiceProvider = Provider<BillsService>(

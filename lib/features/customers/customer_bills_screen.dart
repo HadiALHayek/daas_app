@@ -72,6 +72,54 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
     }
   }
 
+  Future<void> _deleteBill(Bill bill) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          StringsAr.confirmDelete,
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: Text('حذف الفاتورة رقم #${bill.billNumber}؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(StringsAr.cancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(StringsAr.delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await ref.read(billsServiceProvider).deleteBill(bill.id);
+      _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حذف الفاتورة')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is Exception
+                  ? e.toString().replaceFirst('Exception: ', '')
+                  : StringsAr.error,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _editCustomer() async {
     if (_customer == null) return;
 
@@ -238,6 +286,7 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
                                   ],
                                 ),
                                 onTap: () => context.push('/bills/${bill.id}'),
+                                onDelete: () => _deleteBill(bill),
                               );
                             },
                           ),

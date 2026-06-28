@@ -252,10 +252,13 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
       if (!mounted) return;
 
-      // Navigate to detail screen. If payImmediately is true, add query param to trigger auto-print.
+      // Navigate based on whether it was a cash payment or not
       final billId = bill.id;
-      final path = payImmediately ? '/bills/$billId?print=true' : '/bills/$billId';
-      context.pushReplacement(path);
+      if (payImmediately) {
+        context.pushReplacement('/bills/$billId/print');
+      } else {
+        context.pushReplacement('/bills/$billId');
+      }
     } catch (e) {
       if (mounted) {
         final message = e is Exception
@@ -562,32 +565,51 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
   Widget _buildCustomerDropdown() {
     final customers = _customers ?? [];
-    return InputDecorator(
-      decoration: const InputDecoration(
-        labelText: StringsAr.selectCustomer,
-        prefixIcon: Icon(Icons.person_outline_rounded),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<Customer>(
-          value: _selectedCustomer,
-          isExpanded: true,
-          hint: Text(
-            customers.isEmpty
-                ? 'لا يوجد عملاء — أضف من شاشة العملاء'
-                : StringsAr.selectCustomer,
-            style: GoogleFonts.cairo(
-              color: AppColors.textSecondary,
-              fontSize: 14,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InputDecorator(
+          decoration: const InputDecoration(
+            labelText: StringsAr.selectCustomer,
+            prefixIcon: Icon(Icons.person_outline_rounded),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<Customer>(
+              value: _selectedCustomer,
+              isExpanded: true,
+              hint: Text(
+                customers.isEmpty
+                    ? 'لا يوجد عملاء — أضف من شاشة العملاء'
+                    : StringsAr.selectCustomer,
+                style: GoogleFonts.cairo(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+              items: customers
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c.name)))
+                  .toList(),
+              onChanged: customers.isEmpty
+                  ? null
+                  : (v) => setState(() => _selectedCustomer = v),
             ),
           ),
-          items: customers
-              .map((c) => DropdownMenuItem(value: c, child: Text(c.name)))
-              .toList(),
-          onChanged: customers.isEmpty
-              ? null
-              : (v) => setState(() => _selectedCustomer = v),
         ),
-      ),
+        if (_selectedCustomer != null) ...[
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              '${_selectedCustomer!.phone ?? "بدون هاتف"}  •  ${_selectedCustomer!.address ?? "بدون عنوان"}',
+              style: GoogleFonts.cairo(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

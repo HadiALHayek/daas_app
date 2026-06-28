@@ -50,6 +50,10 @@ class PdfService {
     await Printing.layoutPdf(onLayout: (_) async => doc.save());
   }
 
+  Future<pw.Document> buildDocumentForFormat(Bill bill) async {
+    return _buildDocument(bill);
+  }
+
   Future<void> shareBill(Bill bill) async {
     final doc = await _buildDocument(bill);
     await Printing.sharePdf(

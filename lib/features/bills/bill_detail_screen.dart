@@ -100,6 +100,51 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
     }
   }
 
+  Future<void> _deleteBill() async {
+    final bill = _bill;
+    if (bill == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          StringsAr.confirmDelete,
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: Text('حذف الفاتورة رقم #${bill.billNumber}؟ لا يمكن التراجع عن هذا الإجراء.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(StringsAr.cancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(StringsAr.delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await ref.read(billsServiceProvider).deleteBill(bill.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حذف الفاتورة بنجاح')),
+        );
+        context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
+    }
+  }
+
   bool _isProcessing = false;
 
   Future<void> _addPayment() async {
@@ -164,6 +209,14 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
 
     return AppScaffold(
       title: StringsAr.billDetails,
+      actions: [
+        if (_bill != null)
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+            tooltip: StringsAr.delete,
+            onPressed: _deleteBill,
+          ),
+      ],
       body: _loading
           ? const AppLoading()
           : _bill == null
