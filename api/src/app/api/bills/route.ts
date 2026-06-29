@@ -90,20 +90,31 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    if (billError) return serverError(billError.message);
+    if (billError) {
+      console.error("Bill Insert Error:", billError);
+      return serverError(`فشل إنشاء الفاتورة: ${billError.message}`);
+    }
 
     // 4. Insert Items
-    await supabase.from("bill_items").insert(processedItems.map(i => ({ ...i, bill_id: bill.id })));
+    const { error: itemsError } = await supabase
+      .from("bill_items")
+      .insert(processedItems.map(i => ({ ...i, bill_id: bill.id })));
+
+    if (itemsError) {
+      console.error("Items Insert Error:", itemsError);
+      return serverError(`فشل إضافة الأصناف: ${itemsError.message}`);
+    }
 
     // 5. Insert Payment if provided
     const paymentAmount = initial_payment != null ? Number(Number(initial_payment).toFixed(2)) : null;
     if (paymentAmount != null && paymentAmount > 0) {
-      await supabase.from("bill_payments").insert({
+      const { error: paymentError } = await supabase.from("bill_payments").insert({
         bill_id: bill.id,
         amount: Math.min(paymentAmount, total),
         notes: "دفع نقدي فوراً",
         usd_to_syp_rate: rate,
       });
+      if (paymentError) console.error("Initial Payment Error:", paymentError);
     }
 
     // 6. Fresh Fetch: Get the complete bill state from DB
@@ -136,6 +147,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (e) {
+    console.error("Unexpected Error:", e);
     return serverError(e instanceof Error ? e.message : "خطأ غير متوقع");
   }
 }
