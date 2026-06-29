@@ -22,13 +22,13 @@ export async function POST(request: NextRequest) {
     const manual_customer_name = body?.manual_customer_name ?? body?.manualCustomerName;
     const manual_customer_phone = body?.manual_customer_phone ?? body?.manualCustomerPhone;
     const currency = body?.currency;
-    const seller_signature = body?.seller_signature ?? body?.sellerSignature ?? "";
+    const seller_signature = body?.seller_signature ?? body?.sellerSignature ?? "manual";
     const items = body?.items;
     const discount = Math.max(0, Number(body?.discount ?? 0));
-    const initial_payment = body?.initial_payment ?? body?.initialPayment ?? body?.amount_paid ?? null;
+    const initial_payment = body?.initial_payment ?? body?.initialPayment ?? null;
 
     if (!customer_id && !manual_customer_name) {
-      return Response.json({ error: "العميل مطلوب" }, { status: 400 });
+      return Response.json({ error: "العميل مطلوب (اختر عميلاً أو أدخل اسماً يدوياً)" }, { status: 400 });
     }
     if (!currency || !Array.isArray(items) || items.length === 0) {
       return Response.json({ error: "البيانات غير مكتملة" }, { status: 400 });
@@ -85,14 +85,14 @@ export async function POST(request: NextRequest) {
         subtotal,
         discount,
         total,
-        seller_signature: seller_signature || "manual",
+        seller_signature: seller_signature,
       })
       .select()
       .single();
 
     if (billError) {
-      console.error("Bill Insert Error:", billError);
-      return serverError(`فشل إنشاء الفاتورة: ${billError.message}`);
+      console.error("Supabase Bill Error:", billError);
+      return Response.json({ error: `خطأ في قاعدة البيانات (Bill): ${billError.message}` }, { status: 500 });
     }
 
     // 4. Insert Items
@@ -101,20 +101,19 @@ export async function POST(request: NextRequest) {
       .insert(processedItems.map(i => ({ ...i, bill_id: bill.id })));
 
     if (itemsError) {
-      console.error("Items Insert Error:", itemsError);
-      return serverError(`فشل إضافة الأصناف: ${itemsError.message}`);
+      console.error("Supabase Items Error:", itemsError);
+      return Response.json({ error: `خطأ في قاعدة البيانات (Items): ${itemsError.message}` }, { status: 500 });
     }
 
     // 5. Insert Payment if provided
     const paymentAmount = initial_payment != null ? Number(Number(initial_payment).toFixed(2)) : null;
     if (paymentAmount != null && paymentAmount > 0) {
-      const { error: paymentError } = await supabase.from("bill_payments").insert({
+      await supabase.from("bill_payments").insert({
         bill_id: bill.id,
         amount: Math.min(paymentAmount, total),
         notes: "دفع نقدي فوراً",
         usd_to_syp_rate: rate,
       });
-      if (paymentError) console.error("Initial Payment Error:", paymentError);
     }
 
     // 6. Fresh Fetch: Get the complete bill state from DB
@@ -124,7 +123,7 @@ export async function POST(request: NextRequest) {
       .eq("id", bill.id)
       .single();
 
-    if (fetchError || !finalBill) return serverError("فشل استرجاع البيانات المحدثة");
+    if (fetchError || !finalBill) return serverError("تم الحفظ ولكن فشل استرجاع البيانات المحدثة للعرض");
 
     const payments = (finalBill.bill_payments ?? []).map((p: any) => ({ ...p, amount: Number(p.amount) }));
     const amountPaid = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
@@ -147,7 +146,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (e) {
-    console.error("Unexpected Error:", e);
-    return serverError(e instanceof Error ? e.message : "خطأ غير متوقع");
+    console.error("POST /api/bills Crash:", e);
+    return serverError(e instanceof Error ? e.message : "خطأ غير متوقع في الخادم");
   }
 }

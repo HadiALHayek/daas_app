@@ -273,6 +273,26 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                                       ),
                                     ),
                                   ),
+                                if (_bill!.customerId == null)
+                                  Container(
+                                    margin: const EdgeInsets.only(left: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.info,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'بيع مباشر',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
                                 const Spacer(),
                                 CurrencyBadge(currency: _bill!.currency),
                               ],
@@ -391,6 +411,41 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                           ),
                         ),
                       const SizedBox(height: 16),
+                      if (_bill!.outstandingBills.isNotEmpty) ...[
+                        Text(
+                          'مبالغ مستحقة من فواتير سابقة',
+                          style: GoogleFonts.cairo(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.error,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ..._bill!.outstandingBills.map(
+                          (ob) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: ListItemCard(
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    AppColors.error.withValues(alpha: 0.12),
+                                foregroundColor: AppColors.error,
+                                child: const Icon(Icons.history_rounded, size: 20),
+                              ),
+                              title: 'فاتورة #${ob.billNumber}',
+                              subtitle: 'الإجمالي: ${priceFormat.format(ob.total)} ${ob.currencyLabel}',
+                              trailing: Text(
+                                '${priceFormat.format(ob.amountRemaining)} ${ob.currencyLabel}',
+                                style: GoogleFonts.cairo(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                              onTap: () => context.push('/bills/${ob.id}'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       Text(
                         'الأصناف',
                         style: GoogleFonts.cairo(

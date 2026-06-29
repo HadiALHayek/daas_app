@@ -64,6 +64,36 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const amountPaid = Number(payments.reduce((sum, p) => sum + p.amount, 0).toFixed(2));
     const total = Number(Number(bill.total).toFixed(2));
 
+    let outstandingBills: any[] = [];
+    if (bill.customer_id) {
+      // Fetch other unpaid bills for this customer
+      const { data: otherBills } = await supabase
+        .from("bills")
+        .select("id, bill_number, total, currency, bill_payments(amount)")
+        .eq("customer_id", bill.customer_id)
+        .neq("id", id)
+        .order("created_at", { ascending: false });
+
+      if (otherBills) {
+        outstandingBills = otherBills
+          .map((b: any) => {
+            const paid = (b.bill_payments ?? []).reduce(
+              (sum: number, p: any) => sum + Number(p.amount),
+              0
+            );
+            const remaining = Number((Number(b.total) - paid).toFixed(2));
+            return {
+              id: b.id,
+              bill_number: b.bill_number,
+              total: Number(b.total),
+              amount_remaining: remaining,
+              currency: b.currency,
+            };
+          })
+          .filter((b) => b.amount_remaining > 0.01);
+      }
+    }
+
     return Response.json({
       ...bill,
       usd_to_syp_rate: Number(bill.usd_to_syp_rate),
@@ -74,6 +104,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       amount_remaining: Number((total - amountPaid).toFixed(2)),
       items,
       payments,
+      outstanding_bills: outstandingBills,
     });
   } catch (e) {
     return serverError(e instanceof Error ? e.message : "خطأ");

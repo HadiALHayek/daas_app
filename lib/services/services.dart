@@ -19,8 +19,12 @@ class AuthService {
         'email': email,
         'password': password,
       });
-      final token = response.data['access_token'] as String;
-      await _client.saveToken(token);
+      final accessToken = response.data['access_token'] as String;
+      final refreshToken = response.data['refresh_token'] as String;
+      await _client.saveSession(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
     } on DioException catch (e) {
       if (e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout ||

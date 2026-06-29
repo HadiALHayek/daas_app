@@ -26,6 +26,34 @@ class BillPayment {
   }
 }
 
+class OutstandingBill {
+  const OutstandingBill({
+    required this.id,
+    required this.billNumber,
+    required this.total,
+    required this.amountRemaining,
+    required this.currency,
+  });
+
+  final String id;
+  final int billNumber;
+  final double total;
+  final double amountRemaining;
+  final String currency;
+
+  factory OutstandingBill.fromJson(Map<String, dynamic> json) {
+    return OutstandingBill(
+      id: json['id'] as String,
+      billNumber: (json['bill_number'] as num).toInt(),
+      total: (json['total'] as num).toDouble(),
+      amountRemaining: (json['amount_remaining'] as num).toDouble(),
+      currency: json['currency'] as String,
+    );
+  }
+
+  String get currencyLabel => currency == 'SYP' ? 'ل.س' : r'$';
+}
+
 class BillItem {
   const BillItem({
     this.id,
@@ -89,6 +117,7 @@ class Bill {
     this.manualCustomerPhone,
     this.items = const [],
     this.payments = const [],
+    this.outstandingBills = const [],
     this.amountPaid = 0,
     this.amountRemaining = 0,
   });
@@ -110,6 +139,7 @@ class Bill {
   final String? manualCustomerPhone;
   final List<BillItem> items;
   final List<BillPayment> payments;
+  final List<OutstandingBill> outstandingBills;
   final double amountPaid;
   final double amountRemaining;
 
@@ -142,6 +172,10 @@ class Bill {
     final manualName = json['manual_customer_name'] as String?;
     final manualPhone = json['manual_customer_phone'] as String?;
 
+    final outstanding = (json['outstanding_bills'] as List? ?? [])
+        .map((e) => OutstandingBill.fromJson(e as Map<String, dynamic>))
+        .toList();
+
     return Bill(
       id: json['id'] as String,
       billNumber: (json['bill_number'] as num? ?? 0).toInt(),
@@ -164,6 +198,7 @@ class Bill {
           .map((e) => BillItem.fromJson(e as Map<String, dynamic>))
           .toList(),
       payments: paymentsList,
+      outstandingBills: outstanding,
       amountPaid: finalAmountPaid,
       amountRemaining: (totalValue - finalAmountPaid).clamp(0, double.infinity),
     );

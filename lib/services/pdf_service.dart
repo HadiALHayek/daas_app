@@ -235,6 +235,38 @@ class PdfService {
                   cellHeight: 28,
                 ),
               ],
+              if (bill.outstandingBills.isNotEmpty) ...[
+                pw.SizedBox(height: 20),
+                pw.Text(
+                  'مبالغ مستحقة من فواتير سابقة',
+                  style: boldStyle.copyWith(fontSize: 14, color: PdfColors.red800),
+                ),
+                pw.SizedBox(height: 8),
+                pw.TableHelper.fromTextArray(
+                  headers: [
+                    StringsAr.billNumber,
+                    StringsAr.total,
+                    StringsAr.amountRemaining,
+                  ],
+                  data: bill.outstandingBills
+                      .map(
+                        (ob) => [
+                          '#${ob.billNumber}',
+                          '${numberFormat.format(ob.total)} ${ob.currencyLabel}',
+                          '${numberFormat.format(ob.amountRemaining)} ${ob.currencyLabel}',
+                        ],
+                      )
+                      .toList(),
+                  headerStyle: boldStyle.copyWith(color: PdfColors.white),
+                  cellStyle: baseStyle,
+                  headerAlignment: pw.Alignment.centerRight,
+                  cellAlignment: pw.Alignment.centerRight,
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColors.red700,
+                  ),
+                  cellHeight: 28,
+                ),
+              ],
               pw.SizedBox(height: 24),
               _signaturePlaceholder(baseStyle, boldStyle),
             ],
