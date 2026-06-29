@@ -41,8 +41,11 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   // Customer selection state
   bool _isManualCustomer = false;
   Customer? _selectedCustomer;
+  double _customerOldDebtUsd = 0;
+  double _customerOldDebtSyp = 0;
   final _manualNameController = TextEditingController();
   final _manualPhoneController = TextEditingController();
+  final _oldDebtPaymentController = TextEditingController(text: '0');
 
   double _exchangeRate = 15000;
   String _currency = 'SYP';
@@ -68,7 +71,27 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     _discountController.dispose();
     _manualNameController.dispose();
     _manualPhoneController.dispose();
+    _oldDebtPaymentController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchCustomerDebt(String customerId) async {
+    try {
+      final bills =
+          await ref.read(customersServiceProvider).getCustomerBills(customerId);
+      double usdDebt = 0;
+      double sypDebt = 0;
+      for (final b in bills) {
+        usdDebt += b.currency == 'USD' ? b.amountRemaining : 0;
+        sypDebt += b.currency == 'SYP' ? b.amountRemaining : 0;
+      }
+      if (mounted) {
+        setState(() {
+          _customerOldDebtUsd = usdDebt;
+          _customerOldDebtSyp = sypDebt;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _load() async {
@@ -252,6 +275,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             items: items,
             discount: _discount,
             initialPayment: payImmediately ? _total : null,
+            oldDebtPayment: double.tryParse(_oldDebtPaymentController.text) ?? 0,
           );
 
       if (!mounted) return;
@@ -501,6 +525,13 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                 controller: _discountController,
                                 label: StringsAr.discount,
                               ),
+                              if (!_isManualCustomer && (_customerOldDebtUsd > 0.01 || _customerOldDebtSyp > 0.01)) ...[
+                                const SizedBox(height: 12),
+                                NumberTextField(
+                                  controller: _oldDebtPaymentController,
+                                  label: 'تحصيل من ديون سابقة',
+                                ),
+                              ],
                               const SizedBox(height: 12),
                               Row(
                                 mainAxisAlignment:
@@ -588,7 +619,13 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 ],
                 selected: {_isManualCustomer},
                 onSelectionChanged: (values) {
-                  setState(() => _isManualCustomer = values.first);
+                  setState(() {
+                    _isManualCustomer = values.first;
+                    _selectedCustomer = null;
+                    _customerOldDebtUsd = 0;
+                    _customerOldDebtSyp = 0;
+                    _oldDebtPaymentController.text = '0';
+                  });
                 },
               ),
             ),
@@ -643,7 +680,15 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                   .toList(),
               onChanged: customers.isEmpty
                   ? null
-                  : (v) => setState(() => _selectedCustomer = v),
+                  : (v) {
+                      setState(() {
+                        _selectedCustomer = v;
+                        _customerOldDebtUsd = 0;
+                        _customerOldDebtSyp = 0;
+                        _oldDebtPaymentController.text = '0';
+                      });
+                      if (v != null) _fetchCustomerDebt(v.id);
+                    },
             ),
           ),
         ),
@@ -651,13 +696,31 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
           const SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              '${_selectedCustomer!.phone ?? "بدون هاتف"}  •  ${_selectedCustomer!.address ?? "بدون عنوان"}',
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_selectedCustomer!.phone ?? "بدون هاتف"}  •  ${_selectedCustomer!.address ?? "بدون عنوان"}',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (_customerOldDebtUsd > 0.01 || _customerOldDebtSyp > 0.01) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'ديون سابقة: '
+                    '${_customerOldDebtUsd > 0 ? "\$${_priceFormat.format(_customerOldDebtUsd)}  " : ""}'
+                    '${_customerOldDebtSyp > 0 ? "${_priceFormat.format(_customerOldDebtSyp)} ل.س" : ""}',
+                    style: GoogleFonts.cairo(
+                      fontSize: 13,
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

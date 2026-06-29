@@ -275,14 +275,28 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
                                       '${priceFormat.format(bill.total)} ${bill.currencyLabel}',
                                       style: GoogleFonts.cairo(
                                         fontWeight: FontWeight.w800,
-                                        color: AppColors.primary,
+                                        color: AppColors.textPrimary,
+                                        fontSize: 14,
                                       ),
                                     ),
-                                    const Icon(
-                                      Icons.chevron_left_rounded,
-                                      size: 20,
-                                      color: AppColors.textSecondary,
-                                    ),
+                                    if (bill.amountRemaining > 0.01)
+                                      Text(
+                                        'المتبقي: ${priceFormat.format(bill.amountRemaining)} ${bill.currencyLabel}',
+                                        style: GoogleFonts.cairo(
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.error,
+                                          fontSize: 12,
+                                        ),
+                                      )
+                                    else
+                                      Text(
+                                        'مدفوعة بالكامل',
+                                        style: GoogleFonts.cairo(
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.success,
+                                          fontSize: 11,
+                                        ),
+                                      ),
                                   ],
                                 ),
                                 onTap: () => context.push('/bills/${bill.id}'),

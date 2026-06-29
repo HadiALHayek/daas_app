@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     const items = body?.items;
     const discount = Math.max(0, Number(body?.discount ?? 0));
     const initial_payment = body?.initial_payment ?? body?.initialPayment ?? null;
+    const old_debt_payment = Number(body?.old_debt_payment ?? 0);
 
     if (!customer_id && !manual_customer_name) {
       return Response.json({ error: "العميل مطلوب (اختر عميلاً أو أدخل اسماً يدوياً)" }, { status: 400 });
@@ -96,16 +97,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Insert Items
-    const { error: itemsError } = await supabase
-      .from("bill_items")
-      .insert(processedItems.map(i => ({ ...i, bill_id: bill.id })));
+    await supabase.from("bill_items").insert(processedItems.map(i => ({ ...i, bill_id: bill.id })));
 
-    if (itemsError) {
-      console.error("Supabase Items Error:", itemsError);
-      return Response.json({ error: `خطأ في قاعدة البيانات (Items): ${itemsError.message}` }, { status: 500 });
-    }
-
-    // 5. Insert Payment if provided
+    // 5. Insert Payment for CURRENT bill if provided
     const paymentAmount = initial_payment != null ? Number(Number(initial_payment).toFixed(2)) : null;
     if (paymentAmount != null && paymentAmount > 0) {
       await supabase.from("bill_payments").insert({
@@ -116,7 +110,38 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 6. Fresh Fetch: Get the complete bill state from DB
+    // 6. Handle payment for OLD debt if provided
+    if (old_debt_payment > 0 && customer_id) {
+      // Find outstanding bills for this customer (oldest first)
+      const { data: otherBills } = await supabase
+        .from("bills")
+        .select("id, total, bill_payments(amount)")
+        .eq("customer_id", customer_id)
+        .neq("id", bill.id)
+        .order("created_at", { ascending: true });
+
+      if (otherBills) {
+        let remainingToApply = old_debt_payment;
+        for (const ob of otherBills) {
+          if (remainingToApply <= 0) break;
+          const paid = (ob.bill_payments ?? []).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+          const balance = Number(ob.total) - paid;
+
+          if (balance > 0.01) {
+            const applyAmount = Math.min(balance, remainingToApply);
+            await supabase.from("bill_payments").insert({
+              bill_id: ob.id,
+              amount: Number(applyAmount.toFixed(2)),
+              notes: `تحصيل ديون سابقة عند إنشاء فاتورة #${bill.bill_number}`,
+              usd_to_syp_rate: rate,
+            });
+            remainingToApply -= applyAmount;
+          }
+        }
+      }
+    }
+
+    // 7. Fresh Fetch: Get the complete bill state from DB
     const { data: finalBill, error: fetchError } = await supabase
       .from("bills")
       .select("*, customers(*), bill_items(*), bill_payments(*)")

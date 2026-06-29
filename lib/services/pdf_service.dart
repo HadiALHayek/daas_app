@@ -266,6 +266,59 @@ class PdfService {
                   ),
                   cellHeight: 28,
                 ),
+                pw.SizedBox(height: 8),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  child: pw.Column(
+                    children: [
+                      if (bill.oldDebtUsd > 0)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('إجمالي الديون السابقة (بالدولار):',
+                                style: baseStyle),
+                            pw.Text('\$${numberFormat.format(bill.oldDebtUsd)}',
+                                style: boldStyle),
+                          ],
+                        ),
+                      if (bill.oldDebtSyp > 0)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('إجمالي الديون السابقة (بالليرة):',
+                                style: baseStyle),
+                            pw.Text(
+                                '${numberFormat.format(bill.oldDebtSyp)} ل.س',
+                                style: boldStyle),
+                          ],
+                        ),
+                      pw.Divider(color: PdfColors.grey400),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('الرصيد الإجمالي النهائي المستحق:',
+                              style: boldStyle.copyWith(fontSize: 14)),
+                          pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.end,
+                            children: [
+                              if (bill.grandTotalRemainingUsd > 0)
+                                pw.Text(
+                                    '\$${numberFormat.format(bill.grandTotalRemainingUsd)}',
+                                    style: boldStyle.copyWith(
+                                        fontSize: 14, color: PdfColors.red)),
+                              if (bill.grandTotalRemainingSyp > 0)
+                                pw.Text(
+                                    '${numberFormat.format(bill.grandTotalRemainingSyp)} ل.س',
+                                    style: boldStyle.copyWith(
+                                        fontSize: 14, color: PdfColors.red)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
               pw.SizedBox(height: 24),
               _signaturePlaceholder(baseStyle, boldStyle),

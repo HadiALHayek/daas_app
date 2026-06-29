@@ -51,13 +51,7 @@ class _SessionScopeState extends ConsumerState<SessionScope>
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) {
-        ref.read(apiClientProvider).recordSessionActivity();
-      },
-      child: widget.child,
-    );
+    return widget.child;
   }
 }
 

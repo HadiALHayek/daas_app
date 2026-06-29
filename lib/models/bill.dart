@@ -207,4 +207,18 @@ class Bill {
   String get currencyLabel => currency == 'SYP' ? 'ل.س' : r'$';
 
   bool get isFullyPaid => amountRemaining <= 0.05;
+
+  double get oldDebtUsd => outstandingBills
+      .where((b) => b.currency == 'USD')
+      .fold(0, (sum, b) => sum + b.amountRemaining);
+
+  double get oldDebtSyp => outstandingBills
+      .where((b) => b.currency == 'SYP')
+      .fold(0, (sum, b) => sum + b.amountRemaining);
+
+  double get grandTotalRemainingUsd =>
+      (currency == 'USD' ? amountRemaining : 0) + oldDebtUsd;
+
+  double get grandTotalRemainingSyp =>
+      (currency == 'SYP' ? amountRemaining : 0) + oldDebtSyp;
 }

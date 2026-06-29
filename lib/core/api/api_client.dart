@@ -57,11 +57,14 @@ class ApiClient {
                 final options = e.requestOptions;
                 options.headers['Authorization'] = 'Bearer $newAccessToken';
                 
-                final response = await _dio.fetch(options);
+                // Use a fresh Dio instance to avoid interceptor recursion
+                final retryDio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
+                final response = await retryDio.fetch(options);
                 return handler.resolve(response);
-              } catch (_) {
-                // Refresh failed, clear session and let the error bubble up
+              } catch (refreshError) {
+                // Refresh failed (e.g., refresh token revoked), clear and force login
                 await clearToken();
+                return handler.reject(e);
               }
             }
           }
