@@ -181,7 +181,6 @@ class BillsService {
     String? manualCustomerPhone,
     double discount = 0,
     double? initialPayment,
-    double oldDebtPayment = 0,
   }) async {
     try {
       final payload = {
@@ -193,7 +192,6 @@ class BillsService {
         'discount': discount,
         'items': items.map((i) => i.toCreateJson()).toList(),
         if (initialPayment != null) 'initial_payment': initialPayment,
-        'old_debt_payment': oldDebtPayment,
       };
       final response = await _client.dio.post('/api/bills', data: payload);
       return Bill.fromJson(response.data as Map<String, dynamic>);
