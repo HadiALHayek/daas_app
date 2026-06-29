@@ -8,13 +8,14 @@ interface BillRow {
   total: number;
   usd_to_syp_rate: number;
   created_at: string;
-  bill_payments: Array<{ amount: number }>;
+  bill_payments: Array<{ amount: number; usd_to_syp_rate?: number }>;
 }
 
 interface ExpenseRow {
   amount: number;
   currency: string;
   payment_date: string;
+  usd_to_syp_rate?: number;
 }
 
 interface CurrencyTotals {
@@ -42,6 +43,7 @@ export async function GET(request: NextRequest) {
 
     const supabase = getAdminClient();
 
+    // Fetch current exchange rate for fallback
     const { data: settings } = await supabase
       .from("settings")
       .select("usd_to_syp")
@@ -64,12 +66,14 @@ export async function GET(request: NextRequest) {
     const [billsResult, expensesResult] = await Promise.all([
       supabase
         .from("bills")
-        .select("id, currency, total, usd_to_syp_rate, created_at, bill_payments(amount)")
+        .select(
+          "id, currency, total, usd_to_syp_rate, created_at, bill_payments(amount, usd_to_syp_rate)"
+        )
         .gte("created_at", startIso)
         .lt("created_at", endIso),
       supabase
         .from("expense_payments")
-        .select("amount, currency, payment_date")
+        .select("amount, currency, payment_date, usd_to_syp_rate")
         .gte("payment_date", startIso)
         .lt("payment_date", endIso),
     ]);
@@ -78,9 +82,12 @@ export async function GET(request: NextRequest) {
     if (expensesResult.error) return serverError(expensesResult.error.message);
 
     const bills = (billsResult.data ?? []) as unknown as BillRow[];
-    const expenses = (expensesResult.data ?? []) as ExpenseRow[];
+    const expenses = (expensesResult.data ?? []) as unknown as ExpenseRow[];
 
-    const calculateTotals = (periodBills: BillRow[], periodExpenses: ExpenseRow[]): CurrencyTotals => {
+    const calculateTotals = (
+      periodBills: BillRow[],
+      periodExpenses: ExpenseRow[]
+    ): CurrencyTotals => {
       let incomingUsd = 0;
       let collectedUsd = 0;
       let uncollectedUsd = 0;
@@ -88,16 +95,26 @@ export async function GET(request: NextRequest) {
       let outgoingUsd = 0;
 
       for (const bill of periodBills) {
-        const rate = Number(bill.usd_to_syp_rate || currentRate);
+        const billRate = Number(bill.usd_to_syp_rate || currentRate);
         const total = Number(bill.total);
-        const paid = (bill.bill_payments || []).reduce((sum, p) => sum + Number(p.amount), 0);
-        const debt = Math.max(0, total - paid);
 
-        // Consolidated Sales & Collections (in USD)
-        incomingUsd += bill.currency === "USD" ? total : total / rate;
-        collectedUsd += bill.currency === "USD" ? paid : paid / rate;
+        // Sales (Incoming) uses the bill's creation rate
+        incomingUsd += bill.currency === "USD" ? total : total / billRate;
 
-        // Debt is tracked in original currency
+        let totalPaidInOriginalCurrency = 0;
+
+        for (const p of bill.bill_payments || []) {
+          const paymentAmount = Number(p.amount);
+          const paymentRate = Number(p.usd_to_syp_rate || billRate);
+
+          totalPaidInOriginalCurrency += paymentAmount;
+
+          // Collection uses the historical rate of the payment day
+          collectedUsd +=
+            bill.currency === "USD" ? paymentAmount : paymentAmount / paymentRate;
+        }
+
+        const debt = Math.max(0, total - totalPaidInOriginalCurrency);
         if (bill.currency === "USD") {
           uncollectedUsd += debt;
         } else {
@@ -106,14 +123,16 @@ export async function GET(request: NextRequest) {
       }
 
       for (const exp of periodExpenses) {
-        outgoingUsd += exp.currency === "USD" ? Number(exp.amount) : Number(exp.amount) / currentRate;
+        const expRate = Number(exp.usd_to_syp_rate || currentRate);
+        const amount = Number(exp.amount);
+        outgoingUsd += exp.currency === "USD" ? amount : amount / expRate;
       }
 
       return {
         incoming: Number(incomingUsd.toFixed(2)),
         collected: Number(collectedUsd.toFixed(2)),
         uncollected_usd: Number(uncollectedUsd.toFixed(2)),
-        uncollected_syp: Number(uncollectedSyp.toFixed(0)), // SYP usually doesn't need decimals
+        uncollected_syp: Number(uncollectedSyp.toFixed(0)),
         outgoing: Number(outgoingUsd.toFixed(2)),
         profit: Number((collectedUsd - outgoingUsd).toFixed(2)),
       };
@@ -132,11 +151,11 @@ export async function GET(request: NextRequest) {
         const mStart = new Date(year, m - 1, 1);
         const mEnd = new Date(year, m, 1);
 
-        const monthBills = bills.filter(b => {
+        const monthBills = bills.filter((b) => {
           const d = new Date(b.created_at);
           return d >= mStart && d < mEnd;
         });
-        const monthExpenses = expenses.filter(e => {
+        const monthExpenses = expenses.filter((e) => {
           const d = new Date(e.payment_date);
           return d >= mStart && d < mEnd;
         });

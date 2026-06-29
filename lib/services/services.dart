@@ -323,7 +323,7 @@ class ReportsService {
       );
       final data = response.data as Map<String, dynamic>;
 
-      if (data['syp'] is Map && data['usd'] is Map) {
+      if (data['report'] is Map) {
         return ProfitReport.fromJson(data);
       }
 
@@ -338,6 +338,9 @@ class ReportsService {
     required int year,
     int? month,
   }) async {
+    final rateResponse = await _client.dio.get('/api/settings/exchange-rate');
+    final exchangeRate = (rateResponse.data['usd_to_syp'] as num).toDouble();
+
     final expensesResponse = await _client.dio.get('/api/expenses');
     final expenses = (expensesResponse.data as List)
         .map((e) => ExpensePayment.fromJson(e as Map<String, dynamic>))
@@ -361,6 +364,7 @@ class ReportsService {
       month: month,
       bills: bills,
       expenses: expenses,
+      exchangeRate: exchangeRate,
     );
   }
 }

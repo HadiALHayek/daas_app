@@ -50,6 +50,16 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getAdminClient();
+
+    // Get current rate for historical tracking
+    let rate = 15000;
+    const { data: settings } = await supabase
+      .from("settings")
+      .select("usd_to_syp")
+      .eq("id", 1)
+      .maybeSingle();
+    if (settings) rate = Number(settings.usd_to_syp);
+
     const { data, error } = await supabase
       .from("expense_payments")
       .insert({
@@ -59,6 +69,7 @@ export async function POST(request: NextRequest) {
         currency,
         notes: notes ? String(notes).trim() : null,
         payment_date: payment_date ?? new Date().toISOString(),
+        usd_to_syp_rate: rate,
       })
       .select()
       .single();

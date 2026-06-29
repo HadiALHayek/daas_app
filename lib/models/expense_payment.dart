@@ -7,6 +7,7 @@ class ExpensePayment {
     required this.currency,
     required this.paymentDate,
     this.notes,
+    this.usdToSypRate,
   });
 
   final String id;
@@ -16,6 +17,7 @@ class ExpensePayment {
   final String currency;
   final DateTime paymentDate;
   final String? notes;
+  final double? usdToSypRate;
 
   factory ExpensePayment.fromJson(Map<String, dynamic> json) {
     return ExpensePayment(
@@ -26,6 +28,9 @@ class ExpensePayment {
       currency: json['currency'] as String,
       paymentDate: DateTime.parse(json['payment_date'] as String),
       notes: json['notes'] as String?,
+      usdToSypRate: json['usd_to_syp_rate'] != null
+          ? (json['usd_to_syp_rate'] as num).toDouble()
+          : null,
     );
   }
 

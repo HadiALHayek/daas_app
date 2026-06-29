@@ -4,12 +4,14 @@ class BillPayment {
     required this.amount,
     required this.paymentDate,
     this.notes,
+    this.usdToSypRate,
   });
 
   final String id;
   final double amount;
   final DateTime paymentDate;
   final String? notes;
+  final double? usdToSypRate;
 
   factory BillPayment.fromJson(Map<String, dynamic> json) {
     return BillPayment(
@@ -17,6 +19,9 @@ class BillPayment {
       amount: (json['amount'] as num).toDouble(),
       paymentDate: DateTime.parse(json['payment_date'] as String),
       notes: json['notes'] as String?,
+      usdToSypRate: json['usd_to_syp_rate'] != null
+          ? (json['usd_to_syp_rate'] as num).toDouble()
+          : null,
     );
   }
 }

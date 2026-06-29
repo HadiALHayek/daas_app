@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
         bill_id: bill.id,
         amount: Math.min(paymentAmount, total), // Cap at total just in case
         notes: "دفع نقدي فوراً",
+        usd_to_syp_rate: rate,
       });
     }
 

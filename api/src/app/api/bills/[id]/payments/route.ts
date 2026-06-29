@@ -71,11 +71,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const newAmount = Number(amount);
     const billTotal = Number(bill.total);
 
-    if (paidSoFar + newAmount > billTotal + 0.001) {
+    if (paidSoFar + newAmount > billTotal + 0.01) {
       return badRequest(
         `المبلغ يتجاوز المتبقي على الفاتورة (${billTotal - paidSoFar})`
       );
     }
+
+    // Get current rate for historical tracking
+    let rate = 15000;
+    const { data: settings } = await supabase
+      .from("settings")
+      .select("usd_to_syp")
+      .eq("id", 1)
+      .maybeSingle();
+    if (settings) rate = Number(settings.usd_to_syp);
 
     const { data, error } = await supabase
       .from("bill_payments")
@@ -84,6 +93,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         amount: newAmount,
         notes: notes ? String(notes).trim() : null,
         payment_date: payment_date ?? new Date().toISOString(),
+        usd_to_syp_rate: rate,
       })
       .select()
       .single();

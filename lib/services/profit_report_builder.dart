@@ -19,16 +19,60 @@ _Range _rangeFor(String period, int year, int? month) {
   return _Range(DateTime(year), DateTime(year + 1));
 }
 
-String _currencyKey(String currency) => currency == 'USD' ? 'USD' : 'SYP';
+CurrencyTotals _calculateTotals({
+  required List<Bill> bills,
+  required List<ExpensePayment> expenses,
+  required double exchangeRate,
+  required _Range range,
+}) {
+  double incomingUsd = 0;
+  double collectedUsd = 0;
+  double uncollectedUsd = 0;
+  double uncollectedSyp = 0;
+  double outgoingUsd = 0;
 
-CurrencyTotals _buildCurrencyTotals(
-    double incoming, double collected, double uncollected, double outgoing) {
+  for (final bill in bills) {
+    if (!_inRange(bill.createdAt, range)) continue;
+
+    final billRate = bill.usdToSypRate > 0 ? bill.usdToSypRate : exchangeRate;
+    final total = bill.total;
+    
+    // Incoming uses the bill's creation rate
+    incomingUsd += bill.currency == 'USD' ? total : total / billRate;
+
+    double totalPaidInOriginalCurrency = 0;
+    for (final p in bill.payments) {
+      final paymentAmount = p.amount;
+      final paymentRate = (p.usdToSypRate ?? 0) > 0 ? p.usdToSypRate! : billRate;
+      
+      totalPaidInOriginalCurrency += paymentAmount;
+
+      // Collected uses the historical rate of the payment
+      collectedUsd += bill.currency == 'USD' ? paymentAmount : paymentAmount / paymentRate;
+    }
+
+    final debt = (total - totalPaidInOriginalCurrency).clamp(0.0, double.infinity);
+    if (bill.currency == 'USD') {
+      uncollectedUsd += debt;
+    } else {
+      uncollectedSyp += debt;
+    }
+  }
+
+  for (final exp in expenses) {
+    if (!_inRange(exp.paymentDate, range)) continue;
+    final expRate = (exp.usdToSypRate ?? 0) > 0 ? exp.usdToSypRate! : exchangeRate;
+    outgoingUsd +=
+        exp.currency == 'USD' ? exp.amount : exp.amount / expRate;
+  }
+
   return CurrencyTotals(
-    incoming: incoming,
-    collected: collected,
-    uncollected: uncollected,
-    outgoing: outgoing,
-    profit: collected - outgoing,
+    incoming: incomingUsd,
+    collected: collectedUsd,
+    uncollectedUsd: uncollectedUsd,
+    uncollectedSyp: uncollectedSyp,
+    outgoing: outgoingUsd,
+    profit: collectedUsd - outgoingUsd,
   );
 }
 
@@ -38,87 +82,41 @@ ProfitReport buildProfitReport({
   required int? month,
   required List<Bill> bills,
   required List<ExpensePayment> expenses,
+  double exchangeRate = 15000,
 }) {
   final range = _rangeFor(period, year, month);
 
-  double incomingSyp = 0;
-  double incomingUsd = 0;
-  double collectedSyp = 0;
-  double collectedUsd = 0;
-  double uncollectedSyp = 0;
-  double uncollectedUsd = 0;
-  double outgoingSyp = 0;
-  double outgoingUsd = 0;
+  final totalReport = _calculateTotals(
+    bills: bills,
+    expenses: expenses,
+    exchangeRate: exchangeRate,
+    range: range,
+  );
+
   var billCount = 0;
-
   for (final bill in bills) {
-    if (!_inRange(bill.createdAt, range)) continue;
-    billCount++;
-    if (_currencyKey(bill.currency) == 'USD') {
-      incomingUsd += bill.total;
-      collectedUsd += bill.amountPaid;
-      uncollectedUsd += (bill.total - bill.amountPaid);
-    } else {
-      incomingSyp += bill.total;
-      collectedSyp += bill.amountPaid;
-      uncollectedSyp += (bill.total - bill.amountPaid);
-    }
-  }
-
-  for (final expense in expenses) {
-    if (!_inRange(expense.paymentDate, range)) continue;
-    if (_currencyKey(expense.currency) == 'USD') {
-      outgoingUsd += expense.amount;
-    } else {
-      outgoingSyp += expense.amount;
-    }
+    if (_inRange(bill.createdAt, range)) billCount++;
   }
 
   final breakdown = <ProfitBreakdown>[];
   if (period == 'yearly') {
     for (var m = 1; m <= 12; m++) {
       final monthRange = _Range(DateTime(year, m), DateTime(year, m + 1));
-      var monthBills = 0;
-      var monthIncomingSyp = 0.0;
-      var monthIncomingUsd = 0.0;
-      var monthCollectedSyp = 0.0;
-      var monthCollectedUsd = 0.0;
-      var monthUncollectedSyp = 0.0;
-      var monthUncollectedUsd = 0.0;
-      var monthOutgoingSyp = 0.0;
-      var monthOutgoingUsd = 0.0;
-
+      var monthBillCount = 0;
       for (final bill in bills) {
-        if (!_inRange(bill.createdAt, monthRange)) continue;
-        monthBills++;
-        if (_currencyKey(bill.currency) == 'USD') {
-          monthIncomingUsd += bill.total;
-          monthCollectedUsd += bill.amountPaid;
-          monthUncollectedUsd += (bill.total - bill.amountPaid);
-        } else {
-          monthIncomingSyp += bill.total;
-          monthCollectedSyp += bill.amountPaid;
-          monthUncollectedSyp += (bill.total - bill.amountPaid);
-        }
-      }
-
-      for (final expense in expenses) {
-        if (!_inRange(expense.paymentDate, monthRange)) continue;
-        if (_currencyKey(expense.currency) == 'USD') {
-          monthOutgoingUsd += expense.amount;
-        } else {
-          monthOutgoingSyp += expense.amount;
-        }
+        if (_inRange(bill.createdAt, monthRange)) monthBillCount++;
       }
 
       breakdown.add(
         ProfitBreakdown(
           month: m,
-          syp: _buildCurrencyTotals(monthIncomingSyp, monthCollectedSyp,
-              monthUncollectedSyp, monthOutgoingSyp),
-          usd: _buildCurrencyTotals(monthIncomingUsd, monthCollectedUsd,
-              monthUncollectedUsd, monthOutgoingUsd),
-          billCount: monthBills,
+          report: _calculateTotals(
+            bills: bills,
+            expenses: expenses,
+            exchangeRate: exchangeRate,
+            range: monthRange,
+          ),
+          billCount: monthBillCount,
         ),
       );
     }
@@ -128,10 +126,7 @@ ProfitReport buildProfitReport({
     period: period,
     year: year,
     month: month,
-    syp: _buildCurrencyTotals(
-        incomingSyp, collectedSyp, uncollectedSyp, outgoingSyp),
-    usd: _buildCurrencyTotals(
-        incomingUsd, collectedUsd, uncollectedUsd, outgoingUsd),
+    report: totalReport,
     billCount: billCount,
     breakdown: breakdown,
   );
