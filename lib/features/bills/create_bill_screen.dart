@@ -37,7 +37,13 @@ class CreateBillScreen extends ConsumerStatefulWidget {
 class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   List<Customer>? _customers;
   List<CatalogItem>? _catalog;
+  
+  // Customer selection state
+  bool _isManualCustomer = false;
   Customer? _selectedCustomer;
+  final _manualNameController = TextEditingController();
+  final _manualPhoneController = TextEditingController();
+
   double _exchangeRate = 15000;
   String _currency = 'SYP';
   final List<_DraftLine> _lines = [];
@@ -60,6 +66,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   @override
   void dispose() {
     _discountController.dispose();
+    _manualNameController.dispose();
+    _manualPhoneController.dispose();
     super.dispose();
   }
 
@@ -201,27 +209,21 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
           .toStringAsFixed(2));
 
   Future<void> _saveBill({required bool payImmediately}) async {
-    if (_selectedCustomer == null) {
+    if (!_isManualCustomer && _selectedCustomer == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(StringsAr.selectCustomer)),
+      );
+      return;
+    }
+    if (_isManualCustomer && _manualNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى إدخال اسم العميل')),
       );
       return;
     }
     if (_lines.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('أضف صنفاً واحداً على الأقل')),
-      );
-      return;
-    }
-    if (_discount > _subtotal) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الخصم أكبر من المجموع الفرعي')),
-      );
-      return;
-    }
-    if (_total <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('إجمالي الفاتورة يجب أن يكون أكبر من صفر')),
       );
       return;
     }
@@ -243,7 +245,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
           .toList();
 
       final bill = await ref.read(billsServiceProvider).createBill(
-            customerId: _selectedCustomer!.id,
+            customerId: _isManualCustomer ? null : _selectedCustomer!.id,
+            manualCustomerName: _isManualCustomer ? _manualNameController.text.trim() : null,
+            manualCustomerPhone: _isManualCustomer ? _manualPhoneController.text.trim() : null,
             currency: _currency,
             items: items,
             discount: _discount,
@@ -252,7 +256,6 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
       if (!mounted) return;
 
-      // Navigate based on whether it was a cash payment or not
       final billId = bill.id;
       if (payImmediately) {
         context.pushReplacement('/bills/$billId/print');
@@ -315,7 +318,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                       SectionCard(
                         child: Column(
                           children: [
-                            _buildCustomerDropdown(),
+                            _buildCustomerSelector(),
                             const SizedBox(height: 16),
                             _buildCurrencyDropdown(),
                             if (_currency == 'SYP') ...[
@@ -560,6 +563,55 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     ],
                   ),
                 ),
+    );
+  }
+
+  Widget _buildCustomerSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: false,
+                    label: Text('عميل مسجل'),
+                    icon: Icon(Icons.person_outline, size: 18),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    label: Text('بيع مباشر'),
+                    icon: Icon(Icons.person_add_outlined, size: 18),
+                  ),
+                ],
+                selected: {_isManualCustomer},
+                onSelectionChanged: (values) {
+                  setState(() => _isManualCustomer = values.first);
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (!_isManualCustomer)
+          _buildCustomerDropdown()
+        else
+          Column(
+            children: [
+              ArabicTextField(
+                controller: _manualNameController,
+                label: 'اسم العميل المباشر',
+              ),
+              const SizedBox(height: 12),
+              NumberTextField(
+                controller: _manualPhoneController,
+                label: 'رقم الهاتف (اختياري)',
+              ),
+            ],
+          ),
+      ],
     );
   }
 

@@ -19,13 +19,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const customer_id = body?.customer_id ?? body?.customerId;
+    const manual_customer_name = body?.manual_customer_name ?? body?.manualCustomerName;
+    const manual_customer_phone = body?.manual_customer_phone ?? body?.manualCustomerPhone;
     const currency = body?.currency;
     const seller_signature = body?.seller_signature ?? body?.sellerSignature ?? "";
     const items = body?.items;
     const discount = Math.max(0, Number(body?.discount ?? 0));
     const initial_payment = body?.initial_payment ?? body?.initialPayment ?? body?.amount_paid ?? null;
 
-    if (!customer_id || !currency || !Array.isArray(items) || items.length === 0) {
+    if (!customer_id && !manual_customer_name) {
+      return Response.json({ error: "العميل مطلوب" }, { status: 400 });
+    }
+    if (!currency || !Array.isArray(items) || items.length === 0) {
       return Response.json({ error: "البيانات غير مكتملة" }, { status: 400 });
     }
 
@@ -72,7 +77,9 @@ export async function POST(request: NextRequest) {
     const { data: bill, error: billError } = await supabase
       .from("bills")
       .insert({
-        customer_id,
+        customer_id: customer_id || null,
+        manual_customer_name: manual_customer_name || null,
+        manual_customer_phone: manual_customer_phone || null,
         currency,
         usd_to_syp_rate: rate,
         subtotal,
@@ -93,13 +100,13 @@ export async function POST(request: NextRequest) {
     if (paymentAmount != null && paymentAmount > 0) {
       await supabase.from("bill_payments").insert({
         bill_id: bill.id,
-        amount: Math.min(paymentAmount, total), // Cap at total just in case
+        amount: Math.min(paymentAmount, total),
         notes: "دفع نقدي فوراً",
         usd_to_syp_rate: rate,
       });
     }
 
-    // 6. Fresh Fetch: Get the complete bill state from DB (exactly what GET returns)
+    // 6. Fresh Fetch: Get the complete bill state from DB
     const { data: finalBill, error: fetchError } = await supabase
       .from("bills")
       .select("*, customers(*), bill_items(*), bill_payments(*)")
@@ -108,7 +115,6 @@ export async function POST(request: NextRequest) {
 
     if (fetchError || !finalBill) return serverError("فشل استرجاع البيانات المحدثة");
 
-    // 7. Standardize numeric fields for JSON
     const payments = (finalBill.bill_payments ?? []).map((p: any) => ({ ...p, amount: Number(p.amount) }));
     const amountPaid = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
 

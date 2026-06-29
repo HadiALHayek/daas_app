@@ -170,15 +170,19 @@ class BillsService {
   final ApiClient _client;
 
   Future<Bill> createBill({
-    required String customerId,
     required String currency,
     required List<BillItem> items,
+    String? customerId,
+    String? manualCustomerName,
+    String? manualCustomerPhone,
     double discount = 0,
     double? initialPayment,
   }) async {
     try {
       final payload = {
         'customer_id': customerId,
+        'manual_customer_name': manualCustomerName,
+        'manual_customer_phone': manualCustomerPhone,
         'currency': currency,
         'seller_signature': 'manual',
         'discount': discount,

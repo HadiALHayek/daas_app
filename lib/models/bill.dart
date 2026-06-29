@@ -85,6 +85,8 @@ class Bill {
     this.customerName,
     this.customerPhone,
     this.customerAddress,
+    this.manualCustomerName,
+    this.manualCustomerPhone,
     this.items = const [],
     this.payments = const [],
     this.amountPaid = 0,
@@ -104,6 +106,8 @@ class Bill {
   final String? customerName;
   final String? customerPhone;
   final String? customerAddress;
+  final String? manualCustomerName;
+  final String? manualCustomerPhone;
   final List<BillItem> items;
   final List<BillPayment> payments;
   final double amountPaid;
@@ -135,6 +139,9 @@ class Bill {
 
     final totalValue = (json['total'] as num? ?? 0).toDouble();
 
+    final manualName = json['manual_customer_name'] as String?;
+    final manualPhone = json['manual_customer_phone'] as String?;
+
     return Bill(
       id: json['id'] as String,
       billNumber: (json['bill_number'] as num? ?? 0).toInt(),
@@ -148,9 +155,11 @@ class Bill {
           ? DateTime.parse(json['created_at'] as String) 
           : DateTime.now(),
       customerId: customer is Map ? customer['id'] as String? : json['customer_id'] as String?,
-      customerName: customer is Map ? customer['name'] as String? : null,
-      customerPhone: customer is Map ? customer['phone'] as String? : null,
+      customerName: customer is Map ? customer['name'] as String? : manualName,
+      customerPhone: customer is Map ? customer['phone'] as String? : manualPhone,
       customerAddress: customer is Map ? customer['address'] as String? : null,
+      manualCustomerName: manualName,
+      manualCustomerPhone: manualPhone,
       items: (json['items'] as List? ?? json['bill_items'] as List? ?? [])
           .map((e) => BillItem.fromJson(e as Map<String, dynamic>))
           .toList(),
