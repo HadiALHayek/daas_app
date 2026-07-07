@@ -162,16 +162,17 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
       );
       if (data == null) return;
 
-      await ref.read(billsServiceProvider).addBillPayment(
+      final updatedBill = await ref.read(billsServiceProvider).addBillPayment(
             billId: bill.id,
             amount: data.amount,
             notes: data.notes,
+            currentBill: bill,
           );
-      await _load();
-      if (!mounted || _bill == null) return;
+      if (!mounted) return;
+      setState(() => _bill = updatedBill);
 
       try {
-        await pdfService.printBill(_bill!);
+        await pdfService.printBill(updatedBill);
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -411,41 +412,6 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                           ),
                         ),
                       const SizedBox(height: 16),
-                      if (_bill!.outstandingBills.isNotEmpty) ...[
-                        Text(
-                          'مبالغ مستحقة من فواتير سابقة',
-                          style: GoogleFonts.cairo(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.error,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ..._bill!.outstandingBills.map(
-                          (ob) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: ListItemCard(
-                              leading: CircleAvatar(
-                                backgroundColor:
-                                    AppColors.error.withValues(alpha: 0.12),
-                                foregroundColor: AppColors.error,
-                                child: const Icon(Icons.history_rounded, size: 20),
-                              ),
-                              title: 'فاتورة #${ob.billNumber}',
-                              subtitle: 'الإجمالي: ${priceFormat.format(ob.total)} ${ob.currencyLabel}',
-                              trailing: Text(
-                                '${priceFormat.format(ob.amountRemaining)} ${ob.currencyLabel}',
-                                style: GoogleFonts.cairo(
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.error,
-                                ),
-                              ),
-                              onTap: () => context.push('/bills/${ob.id}'),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
                       Text(
                         'الأصناف',
                         style: GoogleFonts.cairo(

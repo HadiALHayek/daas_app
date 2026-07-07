@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
+import { buildBillSnapshot } from "@/lib/bill-snapshot";
 import { convertToBillCurrency } from "@/lib/currency";
 
 interface BillLineInput {
@@ -116,34 +117,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 6. Fresh Fetch: Get the complete bill state from DB
-    const { data: finalBill, error: fetchError } = await supabase
-      .from("bills")
-      .select("*, customers(*), bill_items(*), bill_payments(*)")
-      .eq("id", bill.id)
-      .single();
+    // 6. Return complete bill snapshot including previous unpaid bills
+    const snapshot = await buildBillSnapshot(supabase, bill.id);
+    if (!snapshot) {
+      return serverError("تم الحفظ ولكن فشل استرجاع البيانات المحدثة للعرض");
+    }
 
-    if (fetchError || !finalBill) return serverError("تم الحفظ ولكن فشل استرجاع البيانات المحدثة للعرض");
-
-    const payments = (finalBill.bill_payments ?? []).map((p: any) => ({ ...p, amount: Number(p.amount) }));
-    const amountPaid = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
-
-    return Response.json({
-      ...finalBill,
-      usd_to_syp_rate: Number(finalBill.usd_to_syp_rate),
-      subtotal: Number(finalBill.subtotal),
-      discount: Number(finalBill.discount ?? 0),
-      total: Number(finalBill.total),
-      amount_paid: amountPaid,
-      amount_remaining: Number((Number(finalBill.total) - amountPaid).toFixed(2)),
-      items: (finalBill.bill_items ?? []).map((i: any) => ({
-        ...i,
-        quantity: Number(i.quantity),
-        unit_sell_price: Number(i.unit_sell_price),
-        total_sell: Number(i.total_sell),
-      })),
-      payments,
-    }, { status: 201 });
+    return Response.json(snapshot, { status: 201 });
 
   } catch (e) {
     console.error("POST /api/bills Crash:", e);

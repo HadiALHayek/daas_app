@@ -76,202 +76,197 @@ class PdfService {
 
     final doc = pw.Document();
     doc.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         textDirection: pw.TextDirection.rtl,
         margin: const pw.EdgeInsets.all(40),
         theme: pw.ThemeData.withFont(base: arabicRegular, bold: arabicBold),
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              pw.Center(
-                child: pw.Column(
-                  children: [
-                    pw.Text(
-                      StringsAr.factoryName,
-                      style: boldStyle.copyWith(fontSize: 22),
-                    ),
-                    if (StringsAr.factoryPhone.isNotEmpty) ...[
-                      pw.SizedBox(height: 4),
-                      pw.Text(
-                        '${StringsAr.phone}: ${StringsAr.factoryPhone}',
-                        style: baseStyle.copyWith(fontSize: 12),
-                      ),
-                    ],
-                  ],
+        build: (context) => [
+          pw.Center(
+            child: pw.Column(
+              children: [
+                pw.Text(
+                  StringsAr.factoryName,
+                  style: boldStyle.copyWith(fontSize: 22),
                 ),
-              ),
-              pw.SizedBox(height: 16),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
+                if (StringsAr.factoryPhone.isNotEmpty) ...[
+                  pw.SizedBox(height: 4),
                   pw.Text(
-                    '${StringsAr.billNumber}: #${bill.billNumber}',
-                    style: baseStyle,
-                  ),
-                  pw.Text(
-                    '${StringsAr.date}: ${dateFormat.format(bill.createdAt)}',
-                    style: baseStyle,
+                    '${StringsAr.phone}: ${StringsAr.factoryPhone}',
+                    style: baseStyle.copyWith(fontSize: 12),
                   ),
                 ],
-              ),
-              pw.SizedBox(height: 8),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 16),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
               pw.Text(
-                '${StringsAr.customerName}: ${bill.customerName ?? ''}',
+                '${StringsAr.billNumber}: #${bill.billNumber}',
                 style: baseStyle,
               ),
-              if (bill.customerPhone?.isNotEmpty == true)
-                pw.Text(
-                  '${StringsAr.phone}: ${bill.customerPhone}',
-                  style: baseStyle,
-                ),
-              if (bill.customerAddress?.isNotEmpty == true)
-                pw.Text(
-                  '${StringsAr.address}: ${bill.customerAddress}',
-                  style: baseStyle,
-                ),
-              pw.SizedBox(height: 20),
-              pw.TableHelper.fromTextArray(
-                headers: [
-                  StringsAr.itemName,
-                  StringsAr.quantity,
-                  StringsAr.unitPrice,
-                  StringsAr.total,
-                ],
-                data: bill.items
-                    .map(
-                      (item) => [
-                        item.itemName,
-                        numberFormat.format(item.quantity),
-                        '${numberFormat.format(item.unitSellPrice)} $currency',
-                        '${numberFormat.format(item.totalSell)} $currency',
-                      ],
-                    )
-                    .toList(),
-                headerStyle: boldStyle,
-                cellStyle: baseStyle,
-                headerAlignment: pw.Alignment.centerRight,
-                cellAlignment: pw.Alignment.centerRight,
-                headerDecoration: const pw.BoxDecoration(
-                  color: PdfColors.grey300,
-                ),
-                cellHeight: 32,
+              pw.Text(
+                '${StringsAr.date}: ${dateFormat.format(bill.createdAt)}',
+                style: baseStyle,
               ),
-              pw.SizedBox(height: 16),
-              if (bill.discount > 0) ...[
-                pw.Align(
-                  alignment: pw.Alignment.centerLeft,
-                  child: pw.Text(
-                    '${StringsAr.subtotal}: ${numberFormat.format(bill.subtotal)} $currency',
-                    style: baseStyle.copyWith(fontSize: 14),
-                  ),
-                ),
-                pw.SizedBox(height: 4),
-                pw.Align(
-                  alignment: pw.Alignment.centerLeft,
-                  child: pw.Text(
-                    '${StringsAr.discount}: -${numberFormat.format(bill.discount)} $currency',
-                    style: baseStyle.copyWith(fontSize: 14),
-                  ),
-                ),
-                pw.SizedBox(height: 4),
-              ],
-              pw.Align(
-                alignment: pw.Alignment.centerLeft,
-                child: pw.Text(
-                  '${StringsAr.total}: ${numberFormat.format(bill.total)} $currency',
-                  style: boldStyle.copyWith(fontSize: 16),
-                ),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Align(
-                alignment: pw.Alignment.centerLeft,
-                child: pw.Text(
-                  '${StringsAr.amountPaid}: ${numberFormat.format(bill.amountPaid)} $currency',
-                  style: baseStyle.copyWith(fontSize: 13),
-                ),
-              ),
-              pw.SizedBox(height: 4),
-              pw.Align(
-                alignment: pw.Alignment.centerLeft,
-                child: pw.Text(
-                  '${StringsAr.amountRemaining}: ${numberFormat.format(bill.amountRemaining)} $currency',
-                  style: boldStyle.copyWith(fontSize: 13),
-                ),
-              ),
-              if (bill.payments.isNotEmpty) ...[
-                pw.SizedBox(height: 20),
-                pw.Text(
-                  StringsAr.billPayments,
-                  style: boldStyle.copyWith(fontSize: 14),
-                ),
-                pw.SizedBox(height: 8),
-                pw.TableHelper.fromTextArray(
-                  headers: [
-                    StringsAr.paymentDate,
-                    StringsAr.amount,
-                    StringsAr.notes,
-                  ],
-                  data: (List<BillPayment>.from(bill.payments)
-                        ..sort(
-                          (a, b) => a.paymentDate.compareTo(b.paymentDate),
-                        ))
-                      .map(
-                        (payment) => [
-                          dateFormat.format(payment.paymentDate),
-                          '${numberFormat.format(payment.amount)} $currency',
-                          payment.notes ?? '—',
-                        ],
-                      )
-                      .toList(),
-                  headerStyle: boldStyle,
-                  cellStyle: baseStyle,
-                  headerAlignment: pw.Alignment.centerRight,
-                  cellAlignment: pw.Alignment.centerRight,
-                  headerDecoration: const pw.BoxDecoration(
-                    color: PdfColors.grey300,
-                  ),
-                  cellHeight: 28,
-                ),
-              ],
-              if (bill.outstandingBills.isNotEmpty) ...[
-                pw.SizedBox(height: 20),
-                pw.Text(
-                  'مبالغ مستحقة من فواتير سابقة',
-                  style: boldStyle.copyWith(fontSize: 14, color: PdfColors.red800),
-                ),
-                pw.SizedBox(height: 8),
-                pw.TableHelper.fromTextArray(
-                  headers: [
-                    StringsAr.billNumber,
-                    StringsAr.total,
-                    StringsAr.amountRemaining,
-                  ],
-                  data: bill.outstandingBills
-                      .map(
-                        (ob) => [
-                          '#${ob.billNumber}',
-                          '${numberFormat.format(ob.total)} ${ob.currencyLabel}',
-                          '${numberFormat.format(ob.amountRemaining)} ${ob.currencyLabel}',
-                        ],
-                      )
-                      .toList(),
-                  headerStyle: boldStyle.copyWith(color: PdfColors.white),
-                  cellStyle: baseStyle,
-                  headerAlignment: pw.Alignment.centerRight,
-                  cellAlignment: pw.Alignment.centerRight,
-                  headerDecoration: const pw.BoxDecoration(
-                    color: PdfColors.red700,
-                  ),
-                  cellHeight: 28,
-                ),
-              ],
-              pw.SizedBox(height: 24),
-              _signaturePlaceholder(baseStyle, boldStyle),
             ],
-          );
-        },
+          ),
+          pw.SizedBox(height: 8),
+          pw.Text(
+            '${StringsAr.customerName}: ${bill.customerName ?? bill.manualCustomerName ?? ''}',
+            style: baseStyle,
+          ),
+          if ((bill.customerPhone ?? bill.manualCustomerPhone)?.isNotEmpty == true)
+            pw.Text(
+              '${StringsAr.phone}: ${bill.customerPhone ?? bill.manualCustomerPhone}',
+              style: baseStyle,
+            ),
+          if (bill.customerAddress?.isNotEmpty == true)
+            pw.Text(
+              '${StringsAr.address}: ${bill.customerAddress}',
+              style: baseStyle,
+            ),
+          pw.SizedBox(height: 20),
+          pw.TableHelper.fromTextArray(
+            headers: [
+              StringsAr.itemName,
+              StringsAr.quantity,
+              StringsAr.unitPrice,
+              StringsAr.total,
+            ],
+            data: bill.items
+                .map(
+                  (item) => [
+                    item.itemName,
+                    numberFormat.format(item.quantity),
+                    '${numberFormat.format(item.unitSellPrice)} $currency',
+                    '${numberFormat.format(item.totalSell)} $currency',
+                  ],
+                )
+                .toList(),
+            headerStyle: boldStyle,
+            cellStyle: baseStyle,
+            headerAlignment: pw.Alignment.centerRight,
+            cellAlignment: pw.Alignment.centerRight,
+            headerDecoration: const pw.BoxDecoration(
+              color: PdfColors.grey300,
+            ),
+            cellHeight: 32,
+          ),
+          pw.SizedBox(height: 16),
+          if (bill.discount > 0) ...[
+            pw.Align(
+              alignment: pw.Alignment.centerLeft,
+              child: pw.Text(
+                '${StringsAr.subtotal}: ${numberFormat.format(bill.subtotal)} $currency',
+                style: baseStyle.copyWith(fontSize: 14),
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Align(
+              alignment: pw.Alignment.centerLeft,
+              child: pw.Text(
+                '${StringsAr.discount}: -${numberFormat.format(bill.discount)} $currency',
+                style: baseStyle.copyWith(fontSize: 14),
+              ),
+            ),
+            pw.SizedBox(height: 4),
+          ],
+          pw.Align(
+            alignment: pw.Alignment.centerLeft,
+            child: pw.Text(
+              '${StringsAr.total}: ${numberFormat.format(bill.total)} $currency',
+              style: boldStyle.copyWith(fontSize: 16),
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Align(
+            alignment: pw.Alignment.centerLeft,
+            child: pw.Text(
+              '${StringsAr.amountPaid}: ${numberFormat.format(bill.amountPaid)} $currency',
+              style: boldStyle.copyWith(fontSize: 14, color: PdfColors.green800),
+            ),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Align(
+            alignment: pw.Alignment.centerLeft,
+            child: pw.Text(
+              '${StringsAr.amountRemaining}: ${numberFormat.format(bill.amountRemaining)} $currency',
+              style: boldStyle.copyWith(fontSize: 14),
+            ),
+          ),
+          if (bill.payments.isNotEmpty) ...[
+            pw.SizedBox(height: 20),
+            pw.Text(
+              StringsAr.billPayments,
+              style: boldStyle.copyWith(fontSize: 14),
+            ),
+            pw.SizedBox(height: 8),
+            pw.TableHelper.fromTextArray(
+              headers: [
+                StringsAr.paymentDate,
+                StringsAr.amount,
+                StringsAr.notes,
+              ],
+              data: (List<BillPayment>.from(bill.payments)
+                    ..sort(
+                      (a, b) => a.paymentDate.compareTo(b.paymentDate),
+                    ))
+                  .map(
+                    (payment) => [
+                      dateFormat.format(payment.paymentDate),
+                      '${numberFormat.format(payment.amount)} $currency',
+                      payment.notes ?? '—',
+                    ],
+                  )
+                  .toList(),
+              headerStyle: boldStyle,
+              cellStyle: baseStyle,
+              headerAlignment: pw.Alignment.centerRight,
+              cellAlignment: pw.Alignment.centerRight,
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey300,
+              ),
+              cellHeight: 28,
+            ),
+          ],
+          if (bill.outstandingBills.isNotEmpty) ...[
+            pw.SizedBox(height: 20),
+            pw.Text(
+              'مبالغ مستحقة من فواتير سابقة',
+              style: boldStyle.copyWith(fontSize: 14, color: PdfColors.red800),
+            ),
+            pw.SizedBox(height: 8),
+            pw.TableHelper.fromTextArray(
+              headers: [
+                StringsAr.billNumber,
+                StringsAr.total,
+                StringsAr.amountRemaining,
+              ],
+              data: bill.outstandingBills
+                  .map(
+                    (ob) => [
+                      '#${ob.billNumber}',
+                      '${numberFormat.format(ob.total)} ${ob.currencyLabel}',
+                      '${numberFormat.format(ob.amountRemaining)} ${ob.currencyLabel}',
+                    ],
+                  )
+                  .toList(),
+              headerStyle: boldStyle.copyWith(color: PdfColors.white),
+              cellStyle: baseStyle,
+              headerAlignment: pw.Alignment.centerRight,
+              cellAlignment: pw.Alignment.centerRight,
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.red700,
+              ),
+              cellHeight: 28,
+            ),
+          ],
+          pw.SizedBox(height: 24),
+          _signaturePlaceholder(baseStyle, boldStyle),
+        ],
       ),
     );
 

@@ -11,7 +11,6 @@ import '../../core/widgets/arabic_text_field.dart';
 import '../../models/bill.dart';
 import '../../models/customer.dart';
 import '../../models/item.dart';
-import '../../services/pdf_service.dart';
 import '../../services/services.dart';
 
 class _DraftLine {
@@ -51,6 +50,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   bool _loading = true;
   bool _saving = false;
   String? _loadError;
+  List<OutstandingBill>? _outstandingBills;
+  bool _loadingOutstanding = false;
 
   final _priceFormat = NumberFormat('#,##0.##', 'ar');
 
@@ -96,6 +97,35 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   }
 
   String get _currencyLabel => _currency == 'SYP' ? StringsAr.syp : StringsAr.usd;
+
+  Future<void> _loadOutstandingBills(String customerId) async {
+    if (!mounted) return;
+    setState(() {
+      _loadingOutstanding = true;
+      _outstandingBills = null;
+    });
+    try {
+      final outstanding = await ref
+          .read(customersServiceProvider)
+          .getCustomerOutstandingBills(customerId);
+      if (!mounted) return;
+      setState(() => _outstandingBills = outstanding);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _outstandingBills = const []);
+    } finally {
+      if (mounted) setState(() => _loadingOutstanding = false);
+    }
+  }
+
+  void _onCustomerSelected(Customer? customer) {
+    setState(() => _selectedCustomer = customer);
+    if (customer != null) {
+      _loadOutstandingBills(customer.id);
+    } else {
+      setState(() => _outstandingBills = null);
+    }
+  }
 
   double _convertPrice(double amount, String fromCurrency) {
     if (fromCurrency == _currency) return amount;
@@ -258,7 +288,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
       final billId = bill.id;
       if (payImmediately) {
-        context.pushReplacement('/bills/$billId/print');
+        if (!context.mounted) return;
+        context.pushReplacement('/bills/$billId/print', extra: bill);
       } else {
         context.pushReplacement('/bills/$billId');
       }
@@ -340,6 +371,11 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                           ],
                         ),
                       ),
+                      if (!_isManualCustomer &&
+                          _selectedCustomer != null) ...[
+                        const SizedBox(height: 16),
+                        _buildOutstandingBillsSection(),
+                      ],
                       const SizedBox(height: 16),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -588,7 +624,13 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 ],
                 selected: {_isManualCustomer},
                 onSelectionChanged: (values) {
-                  setState(() => _isManualCustomer = values.first);
+                  setState(() {
+                    _isManualCustomer = values.first;
+                    if (_isManualCustomer) {
+                      _selectedCustomer = null;
+                      _outstandingBills = null;
+                    }
+                  });
                 },
               ),
             ),
@@ -643,7 +685,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                   .toList(),
               onChanged: customers.isEmpty
                   ? null
-                  : (v) => setState(() => _selectedCustomer = v),
+                  : _onCustomerSelected,
             ),
           ),
         ),
@@ -661,6 +703,74 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _buildOutstandingBillsSection() {
+    if (_loadingOutstanding) {
+      return const SectionCard(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final outstanding = _outstandingBills ?? const <OutstandingBill>[];
+    if (outstanding.isEmpty) {
+      return SectionCard(
+        child: Text(
+          'لا توجد مبالغ مستحقة من فواتير سابقة',
+          style: GoogleFonts.cairo(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'مبالغ مستحقة من فواتير سابقة',
+          style: GoogleFonts.cairo(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: AppColors.error,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ...outstanding.map(
+          (ob) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: ListItemCard(
+              leading: CircleAvatar(
+                backgroundColor: AppColors.error.withValues(alpha: 0.12),
+                foregroundColor: AppColors.error,
+                child: const Icon(Icons.history_rounded, size: 20),
+              ),
+              title: 'فاتورة #${ob.billNumber}',
+              subtitle:
+                  'الإجمالي: ${_priceFormat.format(ob.total)} ${ob.currencyLabel}',
+              trailing: Text(
+                '${_priceFormat.format(ob.amountRemaining)} ${ob.currencyLabel}',
+                style: GoogleFonts.cairo(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.error,
+                ),
+              ),
+              onTap: () => context.push('/bills/${ob.id}'),
+            ),
+          ),
+        ),
       ],
     );
   }

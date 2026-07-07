@@ -1,15 +1,9 @@
 import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError, notFound, badRequest } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
+import { buildBillSnapshot } from "@/lib/bill-snapshot";
 
 type RouteContext = { params: Promise<{ id: string }> };
-
-function mapPayment(row: Record<string, unknown>) {
-  return {
-    ...row,
-    amount: Number(row.amount),
-  };
-}
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const userId = await verifyAuth(request);
@@ -27,7 +21,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     if (error) return serverError(error.message);
 
-    return Response.json((data ?? []).map(mapPayment));
+    return Response.json(
+      (data ?? []).map((row) => ({ ...row, amount: Number(row.amount) }))
+    );
   } catch (e) {
     return serverError(e instanceof Error ? e.message : "خطأ");
   }
@@ -77,7 +73,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Get current rate for historical tracking
     let rate = 15000;
     const { data: settings } = await supabase
       .from("settings")
@@ -86,21 +81,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .maybeSingle();
     if (settings) rate = Number(settings.usd_to_syp);
 
-    const { data, error } = await supabase
-      .from("bill_payments")
-      .insert({
-        bill_id: billId,
-        amount: newAmount,
-        notes: notes ? String(notes).trim() : null,
-        payment_date: payment_date ?? new Date().toISOString(),
-        usd_to_syp_rate: rate,
-      })
-      .select()
-      .single();
+    const { error: insertError } = await supabase.from("bill_payments").insert({
+      bill_id: billId,
+      amount: newAmount,
+      notes: notes ? String(notes).trim() : null,
+      payment_date: payment_date ?? new Date().toISOString(),
+      usd_to_syp_rate: rate,
+    });
 
-    if (error) return serverError(error.message);
+    if (insertError) return serverError(insertError.message);
 
-    return Response.json(mapPayment(data), { status: 201 });
+    const snapshot = await buildBillSnapshot(supabase, billId);
+    if (!snapshot) {
+      return serverError("تم تسجيل الدفعة ولكن فشل استرجاع الفاتورة");
+    }
+
+    return Response.json(snapshot, { status: 201 });
   } catch (e) {
     return serverError(e instanceof Error ? e.message : "خطأ");
   }

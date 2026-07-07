@@ -9,6 +9,7 @@ import '../features/auth/login_screen.dart';
 import '../features/bills/bill_detail_screen.dart';
 import '../features/bills/bill_print_screen.dart';
 import '../features/bills/create_bill_screen.dart';
+import '../models/bill.dart';
 import '../features/customers/customer_bills_screen.dart';
 import '../features/customers/customers_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
@@ -92,6 +93,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: 'print',
                 builder: (context, state) => BillPrintScreen(
                   billId: state.pathParameters['id']!,
+                  initialBill: state.extra as Bill?,
                 ),
               ),
             ],

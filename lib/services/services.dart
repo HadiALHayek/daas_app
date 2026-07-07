@@ -163,6 +163,20 @@ class CustomersService {
       throw Exception(extractApiError(e));
     }
   }
+
+  Future<List<OutstandingBill>> getCustomerOutstandingBills(
+    String customerId,
+  ) async {
+    try {
+      final response =
+          await _client.dio.get('/api/customers/$customerId/outstanding-bills');
+      return (response.data as List)
+          .map((e) => OutstandingBill.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
 }
 
 final customersServiceProvider = Provider<CustomersService>(
@@ -227,10 +241,11 @@ class BillsService {
     }
   }
 
-  Future<BillPayment> addBillPayment({
+  Future<Bill> addBillPayment({
     required String billId,
     required double amount,
     String? notes,
+    Bill? currentBill,
   }) async {
     try {
       final response = await _client.dio.post(
@@ -240,7 +255,25 @@ class BillsService {
           if (notes != null) 'notes': notes,
         },
       );
-      return BillPayment.fromJson(response.data as Map<String, dynamic>);
+      final data = response.data as Map<String, dynamic>;
+      if (data.containsKey('bill_number') && data.containsKey('total')) {
+        return Bill.fromJson(data).preservingOutstandingFrom(currentBill);
+      }
+
+      // Older API returns only the payment row — merge locally then refresh.
+      final payment = BillPayment.fromJson(data);
+      try {
+        final refreshed = await getBill(billId);
+        final withPaid = refreshed.amountPaid >= amount - 0.001
+            ? refreshed
+            : refreshed.withPayment(payment);
+        return withPaid.preservingOutstandingFrom(currentBill);
+      } catch (_) {
+        if (currentBill != null) {
+          return currentBill.withPayment(payment);
+        }
+        rethrow;
+      }
     } on DioException catch (e) {
       throw Exception(extractApiError(e));
     }

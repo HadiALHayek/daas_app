@@ -207,4 +207,63 @@ class Bill {
   String get currencyLabel => currency == 'SYP' ? 'ل.س' : r'$';
 
   bool get isFullyPaid => amountRemaining <= 0.05;
+
+  Bill withPayment(BillPayment payment) {
+    if (payments.any((p) => p.id == payment.id)) return this;
+    final newPayments = [...payments, payment];
+    final paid = amountPaid + payment.amount;
+    return Bill(
+      id: id,
+      billNumber: billNumber,
+      currency: currency,
+      usdToSypRate: usdToSypRate,
+      subtotal: subtotal,
+      total: total,
+      discount: discount,
+      sellerSignature: sellerSignature,
+      createdAt: createdAt,
+      customerId: customerId,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerAddress: customerAddress,
+      manualCustomerName: manualCustomerName,
+      manualCustomerPhone: manualCustomerPhone,
+      items: items,
+      payments: newPayments,
+      outstandingBills: outstandingBills,
+      amountPaid: paid,
+      amountRemaining: (total - paid).clamp(0, double.infinity),
+    );
+  }
+
+  /// Keeps previous-bill balances when an API response omits them.
+  Bill preservingOutstandingFrom(Bill? previous) {
+    if (previous == null ||
+        outstandingBills.isNotEmpty ||
+        previous.outstandingBills.isEmpty) {
+      return this;
+    }
+    return Bill(
+      id: id,
+      billNumber: billNumber,
+      currency: currency,
+      usdToSypRate: usdToSypRate,
+      subtotal: subtotal,
+      total: total,
+      discount: discount,
+      sellerSignature: sellerSignature,
+      createdAt: createdAt,
+      customerId: customerId,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerAddress: customerAddress,
+      manualCustomerName: manualCustomerName,
+      manualCustomerPhone: manualCustomerPhone,
+      items: items,
+      payments: payments,
+      outstandingBills: previous.outstandingBills,
+      amountPaid: amountPaid,
+      amountRemaining: amountRemaining,
+    );
+  }
 }

@@ -11,9 +11,14 @@ import '../../services/pdf_service.dart';
 import '../../services/services.dart';
 
 class BillPrintScreen extends ConsumerStatefulWidget {
-  const BillPrintScreen({super.key, required this.billId});
+  const BillPrintScreen({
+    super.key,
+    required this.billId,
+    this.initialBill,
+  });
 
   final String billId;
+  final Bill? initialBill;
 
   @override
   ConsumerState<BillPrintScreen> createState() => _BillPrintScreenState();
@@ -26,18 +31,21 @@ class _BillPrintScreenState extends ConsumerState<BillPrintScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialBill != null) {
+      _bill = widget.initialBill;
+      _loading = false;
+    }
     _load();
   }
 
   Future<void> _load() async {
     try {
       final bill = await ref.read(billsServiceProvider).getBill(widget.billId);
-      if (mounted) {
-        setState(() {
-          _bill = bill;
-          _loading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _bill = bill;
+        _loading = false;
+      });
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
@@ -56,7 +64,7 @@ class _BillPrintScreenState extends ConsumerState<BillPrintScreen> {
           tooltip: 'إغلاق والعودة للرئيسية',
         ),
       ),
-      body: _loading
+      body: _loading && _bill == null
           ? const AppLoading()
           : _bill == null
               ? const EmptyState(icon: Icons.error_outline, title: 'خطأ في تحميل البيانات')
@@ -69,9 +77,6 @@ class _BillPrintScreenState extends ConsumerState<BillPrintScreen> {
                   canChangeOrientation: false,
                   canDebug: false,
                   initialPageFormat: PdfPageFormat.a4,
-                  onPrinted: (context) {
-                    // Optional: show a snackbar or navigate back
-                  },
                 ),
     );
   }
