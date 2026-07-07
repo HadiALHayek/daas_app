@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -206,6 +207,7 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
           icon: Icons.pending_actions_rounded,
           color: AppColors.warning,
           backgroundColor: AppColors.accentSoft,
+          onTap: () => context.push('/profits/unpaid'),
         ),
         const SizedBox(height: 12),
         StatMetricCard(

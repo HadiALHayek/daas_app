@@ -18,6 +18,7 @@ import '../features/expenses/expenses_screen.dart';
 import '../features/items/item_form_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/reports/profits_screen.dart';
+import '../features/reports/unpaid_bills_screen.dart';
 import '../features/settings/exchange_rate_screen.dart';
 import '../services/services.dart';
 
@@ -111,6 +112,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'profits',
             builder: (context, state) => const ProfitsScreen(),
+            routes: [
+              GoRoute(
+                path: 'unpaid',
+                builder: (context, state) => const UnpaidBillsScreen(),
+              ),
+            ],
           ),
         ],
       ),

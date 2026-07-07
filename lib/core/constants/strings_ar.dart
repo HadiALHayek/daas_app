@@ -85,4 +85,5 @@ class StringsAr {
   static const directPay = 'بيع مباشر';
   static const directPayBills = 'فواتير البيع المباشر';
   static const payOnPreviousBill = 'دفع على فاتورة سابقة';
+  static const unpaidBills = 'الفواتير غير المسددة';
 }

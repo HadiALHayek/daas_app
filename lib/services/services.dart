@@ -252,6 +252,17 @@ class BillsService {
     }
   }
 
+  Future<List<Bill>> getUnpaidBills() async {
+    try {
+      final response = await _client.dio.get('/api/bills/unpaid');
+      return (response.data as List)
+          .map((e) => Bill.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
   Future<Bill> addBillPayment({
     required String billId,
     required double amount,

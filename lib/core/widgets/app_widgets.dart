@@ -225,6 +225,7 @@ class StatMetricCard extends StatelessWidget {
     required this.icon,
     required this.color,
     this.backgroundColor,
+    this.onTap,
   });
 
   final String title;
@@ -233,11 +234,15 @@ class StatMetricCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final Color? backgroundColor;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
         padding: const EdgeInsets.all(18),
         child: Row(
           children: [
@@ -288,6 +293,7 @@ class StatMetricCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
