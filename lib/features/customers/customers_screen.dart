@@ -179,49 +179,70 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     child: const Text(StringsAr.retry),
                   ),
                 )
-              : _customers == null || _customers!.isEmpty
-              ? EmptyState(
-                  icon: Icons.people_outline,
-                  title: StringsAr.noData,
-                  subtitle: 'أضف عملاء لإنشاء دفاتر الفواتير',
-                  action: FilledButton.icon(
-                    onPressed: _addCustomer,
-                    icon: const Icon(Icons.person_add),
-                    label: const Text(StringsAr.addCustomer),
-                  ),
-                )
               : RefreshIndicator(
                   onRefresh: _load,
-                  child: ListView.separated(
+                  child: ListView(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _customers!.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final customer = _customers![index];
-                      return ListItemCard(
+                    children: [
+                      ListItemCard(
                         leading: CircleAvatar(
                           backgroundColor:
-                              AppColors.primary.withValues(alpha: 0.1),
-                          foregroundColor: AppColors.primary,
-                          child: Text(
-                            customer.name.isNotEmpty
-                                ? customer.name.characters.first
-                                : '?',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
+                              AppColors.warning.withValues(alpha: 0.12),
+                          foregroundColor: AppColors.warning,
+                          child: const Icon(Icons.storefront_rounded),
                         ),
-                        title: customer.name,
-                        subtitle: customer.phone ?? 'بدون رقم هاتف',
+                        title: StringsAr.directPay,
+                        subtitle: StringsAr.directPayBills,
                         trailing: const Icon(
                           Icons.receipt_long_rounded,
-                          color: AppColors.primary,
+                          color: AppColors.warning,
                         ),
                         onTap: () =>
-                            context.push('/customers/${customer.id}/bills'),
-                        onEdit: () => _editCustomer(customer),
-                        onDelete: () => _deleteCustomer(customer),
-                      );
-                    },
+                            context.push('/customers/direct-pay/bills'),
+                      ),
+                      const SizedBox(height: 16),
+                      if (_customers == null || _customers!.isEmpty)
+                        const EmptyState(
+                          compact: true,
+                          icon: Icons.people_outline,
+                          title: StringsAr.noData,
+                          subtitle: 'أضف عملاء لإنشاء دفاتر الفواتير',
+                        )
+                      else
+                        ...List.generate(_customers!.length, (index) {
+                          final customer = _customers![index];
+                          return Padding(
+                            padding: EdgeInsets.only(
+                              bottom: index < _customers!.length - 1 ? 10 : 0,
+                            ),
+                            child: ListItemCard(
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    AppColors.primary.withValues(alpha: 0.1),
+                                foregroundColor: AppColors.primary,
+                                child: Text(
+                                  customer.name.isNotEmpty
+                                      ? customer.name.characters.first
+                                      : '?',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              title: customer.name,
+                              subtitle: customer.phone ?? 'بدون رقم هاتف',
+                              trailing: const Icon(
+                                Icons.receipt_long_rounded,
+                                color: AppColors.primary,
+                              ),
+                              onTap: () => context
+                                  .push('/customers/${customer.id}/bills'),
+                              onEdit: () => _editCustomer(customer),
+                              onDelete: () => _deleteCustomer(customer),
+                            ),
+                          );
+                        }),
+                    ],
                   ),
                 ),
     );

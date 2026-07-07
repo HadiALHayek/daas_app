@@ -232,6 +232,38 @@ class PdfService {
               cellHeight: 28,
             ),
           ],
+          if (bill.crossBillPayments.isNotEmpty) ...[
+            pw.SizedBox(height: 20),
+            pw.Text(
+              StringsAr.paymentsOnPreviousBills,
+              style: boldStyle.copyWith(fontSize: 14, color: PdfColors.green800),
+            ),
+            pw.SizedBox(height: 8),
+            pw.TableHelper.fromTextArray(
+              headers: [
+                StringsAr.billNumber,
+                StringsAr.amount,
+                StringsAr.notes,
+              ],
+              data: bill.crossBillPayments
+                  .map(
+                    (p) => [
+                      '#${p.billNumber}',
+                      '${numberFormat.format(p.amount)} ${p.currencyLabel}',
+                      p.notes ?? '—',
+                    ],
+                  )
+                  .toList(),
+              headerStyle: boldStyle,
+              cellStyle: baseStyle,
+              headerAlignment: pw.Alignment.centerRight,
+              cellAlignment: pw.Alignment.centerRight,
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey300,
+              ),
+              cellHeight: 28,
+            ),
+          ],
           if (bill.outstandingBills.isNotEmpty) ...[
             pw.SizedBox(height: 20),
             pw.Text(

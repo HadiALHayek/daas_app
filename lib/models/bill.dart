@@ -54,6 +54,23 @@ class OutstandingBill {
   String get currencyLabel => currency == 'SYP' ? 'ل.س' : r'$';
 }
 
+/// Payment recorded against an older bill while creating a new one.
+class CrossBillPayment {
+  const CrossBillPayment({
+    required this.billNumber,
+    required this.amount,
+    required this.currency,
+    this.notes,
+  });
+
+  final int billNumber;
+  final double amount;
+  final String currency;
+  final String? notes;
+
+  String get currencyLabel => currency == 'SYP' ? 'ل.س' : r'$';
+}
+
 class BillItem {
   const BillItem({
     this.id,
@@ -118,6 +135,7 @@ class Bill {
     this.items = const [],
     this.payments = const [],
     this.outstandingBills = const [],
+    this.crossBillPayments = const [],
     this.amountPaid = 0,
     this.amountRemaining = 0,
   });
@@ -140,6 +158,7 @@ class Bill {
   final List<BillItem> items;
   final List<BillPayment> payments;
   final List<OutstandingBill> outstandingBills;
+  final List<CrossBillPayment> crossBillPayments;
   final double amountPaid;
   final double amountRemaining;
 
@@ -199,6 +218,7 @@ class Bill {
           .toList(),
       payments: paymentsList,
       outstandingBills: outstanding,
+      crossBillPayments: const [],
       amountPaid: finalAmountPaid,
       amountRemaining: (totalValue - finalAmountPaid).clamp(0, double.infinity),
     );
@@ -207,6 +227,32 @@ class Bill {
   String get currencyLabel => currency == 'SYP' ? 'ل.س' : r'$';
 
   bool get isFullyPaid => amountRemaining <= 0.05;
+
+  Bill withCrossBillPayments(List<CrossBillPayment> crossBillPayments) {
+    return Bill(
+      id: id,
+      billNumber: billNumber,
+      currency: currency,
+      usdToSypRate: usdToSypRate,
+      subtotal: subtotal,
+      total: total,
+      discount: discount,
+      sellerSignature: sellerSignature,
+      createdAt: createdAt,
+      customerId: customerId,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerAddress: customerAddress,
+      manualCustomerName: manualCustomerName,
+      manualCustomerPhone: manualCustomerPhone,
+      items: items,
+      payments: payments,
+      outstandingBills: outstandingBills,
+      crossBillPayments: crossBillPayments,
+      amountPaid: amountPaid,
+      amountRemaining: amountRemaining,
+    );
+  }
 
   Bill withPayment(BillPayment payment) {
     if (payments.any((p) => p.id == payment.id)) return this;
@@ -231,6 +277,7 @@ class Bill {
       items: items,
       payments: newPayments,
       outstandingBills: outstandingBills,
+      crossBillPayments: crossBillPayments,
       amountPaid: paid,
       amountRemaining: (total - paid).clamp(0, double.infinity),
     );
@@ -262,6 +309,7 @@ class Bill {
       items: items,
       payments: payments,
       outstandingBills: previous.outstandingBills,
+      crossBillPayments: crossBillPayments,
       amountPaid: amountPaid,
       amountRemaining: amountRemaining,
     );

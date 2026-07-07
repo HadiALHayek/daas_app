@@ -18,12 +18,14 @@ Future<BillPaymentFormResult?> showBillPaymentDialog({
   required BuildContext context,
   required double maxAmount,
   required String currencyLabel,
+  String? title,
 }) {
   return showDialog<BillPaymentFormResult>(
     context: context,
     builder: (context) => _BillPaymentDialog(
       maxAmount: maxAmount,
       currencyLabel: currencyLabel,
+      title: title,
     ),
   );
 }
@@ -33,10 +35,12 @@ class _BillPaymentDialog extends StatefulWidget {
     super.key,
     required this.maxAmount,
     required this.currencyLabel,
+    this.title,
   });
 
   final double maxAmount;
   final String currencyLabel;
+  final String? title;
 
   @override
   State<_BillPaymentDialog> createState() => _BillPaymentDialogState();
@@ -86,7 +90,7 @@ class _BillPaymentDialogState extends State<_BillPaymentDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text(StringsAr.addPayment),
+      title: Text(widget.title ?? StringsAr.addPayment),
       content: Form(
         key: _formKey,
         child: Column(

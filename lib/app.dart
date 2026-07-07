@@ -12,6 +12,7 @@ import '../features/bills/create_bill_screen.dart';
 import '../models/bill.dart';
 import '../features/customers/customer_bills_screen.dart';
 import '../features/customers/customers_screen.dart';
+import '../features/customers/direct_pay_bills_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/expenses/expenses_screen.dart';
 import '../features/items/item_form_screen.dart';
@@ -71,6 +72,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const CustomersScreen(),
             routes: [
               GoRoute(
+                path: 'direct-pay/bills',
+                builder: (context, state) => const DirectPayBillsScreen(),
+              ),
+              GoRoute(
                 path: ':id/bills',
                 builder: (context, state) => CustomerBillsScreen(
                   customerId: state.pathParameters['id']!,
@@ -87,6 +92,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => BillDetailScreen(
               billId: state.pathParameters['id']!,
               shouldPrint: state.uri.queryParameters['print'] == 'true',
+              initialBill: state.extra as Bill?,
             ),
             routes: [
               GoRoute(

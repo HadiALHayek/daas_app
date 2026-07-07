@@ -81,4 +81,8 @@ class StringsAr {
   static const editCustomer = 'تعديل العميل';
   static const selectItem = 'اختر صنفاً';
   static const subtotal = 'المجموع الفرعي';
+  static const paymentsOnPreviousBills = 'دفعات على فواتير سابقة';
+  static const directPay = 'بيع مباشر';
+  static const directPayBills = 'فواتير البيع المباشر';
+  static const payOnPreviousBill = 'دفع على فاتورة سابقة';
 }

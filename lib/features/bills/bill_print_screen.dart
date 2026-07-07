@@ -39,11 +39,14 @@ class _BillPrintScreenState extends ConsumerState<BillPrintScreen> {
   }
 
   Future<void> _load() async {
+    final preservedCross = widget.initialBill?.crossBillPayments ?? const [];
     try {
       final bill = await ref.read(billsServiceProvider).getBill(widget.billId);
       if (!mounted) return;
       setState(() {
-        _bill = bill;
+        _bill = preservedCross.isNotEmpty
+            ? bill.withCrossBillPayments(preservedCross)
+            : bill;
         _loading = false;
       });
     } catch (e) {

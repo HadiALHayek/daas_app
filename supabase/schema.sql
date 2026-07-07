@@ -34,6 +34,8 @@ create table if not exists customers (
 create table if not exists bills (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid references customers(id),
+  manual_customer_name text,
+  manual_customer_phone text,
   bill_number serial,
   currency text not null check (currency in ('SYP', 'USD')),
   usd_to_syp_rate numeric not null,

@@ -12,6 +12,7 @@ import '../../models/bill.dart';
 import '../../models/customer.dart';
 import '../../models/item.dart';
 import '../../services/services.dart';
+import 'add_bill_payment_dialog.dart';
 
 class _DraftLine {
   _DraftLine({
@@ -24,6 +25,22 @@ class _DraftLine {
   double quantity;
   double unitPrice;
   bool priceEdited = false;
+}
+
+class _PendingOldBillPayment {
+  const _PendingOldBillPayment({
+    required this.billId,
+    required this.billNumber,
+    required this.currency,
+    required this.amount,
+    this.notes,
+  });
+
+  final String billId;
+  final int billNumber;
+  final String currency;
+  final double amount;
+  final String? notes;
 }
 
 class CreateBillScreen extends ConsumerStatefulWidget {
@@ -52,6 +69,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   String? _loadError;
   List<OutstandingBill>? _outstandingBills;
   bool _loadingOutstanding = false;
+  final List<_PendingOldBillPayment> _pendingOldBillPayments = [];
 
   final _priceFormat = NumberFormat('#,##0.##', 'ar');
 
@@ -119,12 +137,62 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   }
 
   void _onCustomerSelected(Customer? customer) {
-    setState(() => _selectedCustomer = customer);
+    setState(() {
+      _selectedCustomer = customer;
+      _pendingOldBillPayments.clear();
+    });
     if (customer != null) {
       _loadOutstandingBills(customer.id);
     } else {
       setState(() => _outstandingBills = null);
     }
+  }
+
+  double _effectiveRemaining(OutstandingBill ob) {
+    final pending = _pendingOldBillPayments
+        .where((p) => p.billId == ob.id)
+        .fold<double>(0, (sum, p) => sum + p.amount);
+    return (ob.amountRemaining - pending).clamp(0, double.infinity);
+  }
+
+  double _pendingAmountForBill(String billId) {
+    return _pendingOldBillPayments
+        .where((p) => p.billId == billId)
+        .fold<double>(0, (sum, p) => sum + p.amount);
+  }
+
+  Future<void> _addPaymentToOldBill(OutstandingBill ob) async {
+    final remaining = _effectiveRemaining(ob);
+    if (remaining <= 0.001) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('هذه الفاتورة مسددة بالكامل')),
+      );
+      return;
+    }
+
+    final data = await showBillPaymentDialog(
+      context: context,
+      maxAmount: remaining,
+      currencyLabel: ob.currencyLabel,
+      title: '${StringsAr.payOnPreviousBill} #${ob.billNumber}',
+    );
+    if (data == null || !mounted) return;
+
+    setState(() {
+      _pendingOldBillPayments.add(
+        _PendingOldBillPayment(
+          billId: ob.id,
+          billNumber: ob.billNumber,
+          currency: ob.currency,
+          amount: data.amount,
+          notes: data.notes,
+        ),
+      );
+    });
+  }
+
+  void _removePendingPayment(_PendingOldBillPayment payment) {
+    setState(() => _pendingOldBillPayments.remove(payment));
   }
 
   double _convertPrice(double amount, String fromCurrency) {
@@ -286,12 +354,53 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
       if (!mounted) return;
 
+      final crossPayments = <CrossBillPayment>[];
+      for (final pending in _pendingOldBillPayments) {
+        try {
+          await ref.read(billsServiceProvider).addBillPayment(
+                billId: pending.billId,
+                amount: pending.amount,
+                notes: pending.notes ??
+                    'دفع مع فاتورة #${bill.billNumber}',
+              );
+          crossPayments.add(
+            CrossBillPayment(
+              billNumber: pending.billNumber,
+              amount: pending.amount,
+              currency: pending.currency,
+              notes: pending.notes,
+            ),
+          );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'فشل تسجيل دفعة فاتورة #${pending.billNumber}: '
+                  '${e is Exception ? e.toString().replaceFirst('Exception: ', '') : StringsAr.error}',
+                ),
+              ),
+            );
+          }
+        }
+      }
+
+      var billForPrint = bill;
+      try {
+        billForPrint = (await ref.read(billsServiceProvider).getBill(bill.id))
+            .withCrossBillPayments(crossPayments);
+      } catch (_) {
+        billForPrint = bill.withCrossBillPayments(crossPayments);
+      }
+
+      if (!mounted) return;
+
       final billId = bill.id;
       if (payImmediately) {
         if (!context.mounted) return;
-        context.pushReplacement('/bills/$billId/print', extra: bill);
+        context.pushReplacement('/bills/$billId/print', extra: billForPrint);
       } else {
-        context.pushReplacement('/bills/$billId');
+        context.pushReplacement('/bills/$billId', extra: billForPrint);
       }
     } catch (e) {
       if (mounted) {
@@ -629,6 +738,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     if (_isManualCustomer) {
                       _selectedCustomer = null;
                       _outstandingBills = null;
+                      _pendingOldBillPayments.clear();
                     }
                   });
                 },
@@ -749,28 +859,90 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         ),
         const SizedBox(height: 10),
         ...outstanding.map(
-          (ob) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: ListItemCard(
-              leading: CircleAvatar(
-                backgroundColor: AppColors.error.withValues(alpha: 0.12),
-                foregroundColor: AppColors.error,
-                child: const Icon(Icons.history_rounded, size: 20),
-              ),
-              title: 'فاتورة #${ob.billNumber}',
-              subtitle:
-                  'الإجمالي: ${_priceFormat.format(ob.total)} ${ob.currencyLabel}',
-              trailing: Text(
-                '${_priceFormat.format(ob.amountRemaining)} ${ob.currencyLabel}',
-                style: GoogleFonts.cairo(
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.error,
+          (ob) {
+            final pending = _pendingAmountForBill(ob.id);
+            final remaining = _effectiveRemaining(ob);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ListItemCard(
+                leading: CircleAvatar(
+                  backgroundColor: AppColors.error.withValues(alpha: 0.12),
+                  foregroundColor: AppColors.error,
+                  child: const Icon(Icons.history_rounded, size: 20),
+                ),
+                title: 'فاتورة #${ob.billNumber}',
+                subtitle: pending > 0
+                    ? 'الإجمالي: ${_priceFormat.format(ob.total)} ${ob.currencyLabel}\n'
+                      'دفعة جديدة: ${_priceFormat.format(pending)} ${ob.currencyLabel}'
+                    : 'الإجمالي: ${_priceFormat.format(ob.total)} ${ob.currencyLabel}',
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${_priceFormat.format(remaining)} ${ob.currencyLabel}',
+                      style: GoogleFonts.cairo(
+                        fontWeight: FontWeight.w800,
+                        color: remaining <= 0.001
+                            ? AppColors.success
+                            : AppColors.error,
+                      ),
+                    ),
+                    if (remaining > 0.001)
+                      TextButton.icon(
+                        onPressed: () => _addPaymentToOldBill(ob),
+                        icon: const Icon(Icons.payments_outlined, size: 16),
+                        label: const Text(StringsAr.addPayment),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              onTap: () => context.push('/bills/${ob.id}'),
+            );
+          },
+        ),
+        if (_pendingOldBillPayments.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  StringsAr.paymentsOnPreviousBills,
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.success,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ..._pendingOldBillPayments.map(
+                  (p) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('فاتورة #${p.billNumber}'),
+                    subtitle: Text(
+                      '${_priceFormat.format(p.amount)} ${p.currency == 'SYP' ? StringsAr.syp : StringsAr.usd}',
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => _removePendingPayment(p),
+                    ),
+                  ),
+                ),
+                Text(
+                  'ستُسجّل هذه الدفعات عند إنشاء الفاتورة وتظهر في الطباعة',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
+        ],
       ],
     );
   }

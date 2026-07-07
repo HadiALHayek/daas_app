@@ -19,10 +19,12 @@ class BillDetailScreen extends ConsumerStatefulWidget {
     super.key,
     required this.billId,
     this.shouldPrint = false,
+    this.initialBill,
   });
 
   final String billId;
   final bool shouldPrint;
+  final Bill? initialBill;
 
   @override
   ConsumerState<BillDetailScreen> createState() => _BillDetailScreenState();
@@ -31,12 +33,17 @@ class BillDetailScreen extends ConsumerStatefulWidget {
 class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
   Bill? _bill;
   bool _loading = true;
+  List<CrossBillPayment> _crossBillPayments = const [];
 
   @override
   void initState() {
     super.initState();
+    _crossBillPayments = widget.initialBill?.crossBillPayments ?? const [];
     _load();
   }
+
+  Bill get _billForPrint =>
+      _bill?.withCrossBillPayments(_crossBillPayments) ?? _bill!;
 
   Future<void> _load() async {
     if (!mounted) return;
@@ -46,7 +53,7 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
       if (!mounted) return;
       setState(() => _bill = bill);
 
-      if (widget.shouldPrint && bill != null) {
+      if (widget.shouldPrint) {
         // Delay slightly to ensure screen transition finishes and UI is rendered
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
@@ -56,7 +63,7 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                 duration: Duration(seconds: 2),
               ),
             );
-            pdfService.printBill(bill).catchError((e) {
+            pdfService.printBill(_billForPrint).catchError((e) {
               debugPrint('Auto-print error: $e');
             });
           }
@@ -172,7 +179,9 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
       setState(() => _bill = updatedBill);
 
       try {
-        await pdfService.printBill(updatedBill);
+        await pdfService.printBill(
+          updatedBill.withCrossBillPayments(_crossBillPayments),
+        );
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -412,6 +421,40 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                           ),
                         ),
                       const SizedBox(height: 16),
+                      if (_crossBillPayments.isNotEmpty) ...[
+                        Text(
+                          StringsAr.paymentsOnPreviousBills,
+                          style: GoogleFonts.cairo(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.success,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ..._crossBillPayments.map(
+                          (p) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: ListItemCard(
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    AppColors.success.withValues(alpha: 0.12),
+                                foregroundColor: AppColors.success,
+                                child: const Icon(Icons.payments_rounded, size: 20),
+                              ),
+                              title: 'فاتورة #${p.billNumber}',
+                              subtitle: p.notes ?? '—',
+                              trailing: Text(
+                                '${priceFormat.format(p.amount)} ${p.currencyLabel}',
+                                style: GoogleFonts.cairo(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.success,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       Text(
                         'الأصناف',
                         style: GoogleFonts.cairo(
@@ -452,13 +495,13 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                       ),
                       const SizedBox(height: 10),
                       FilledButton.icon(
-                        onPressed: () => pdfService.printBill(_bill!),
+                        onPressed: () => pdfService.printBill(_billForPrint),
                         icon: const Icon(Icons.print_rounded),
                         label: const Text(StringsAr.reprint),
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
-                        onPressed: () => pdfService.shareBill(_bill!),
+                        onPressed: () => pdfService.shareBill(_billForPrint),
                         icon: const Icon(Icons.share_rounded),
                         label: const Text(StringsAr.share),
                       ),
