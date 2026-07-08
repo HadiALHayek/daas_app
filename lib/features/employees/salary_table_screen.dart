@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/api/api_errors.dart';
 import '../../core/constants/strings_ar.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_widgets.dart';
@@ -20,7 +19,6 @@ class SalaryTableScreen extends ConsumerStatefulWidget {
 class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
   SalaryWeek? _week;
   bool _loading = true;
-  bool _busy = false;
   String? _error;
   int _offset = 0;
 
@@ -57,84 +55,6 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
   void _changeWeek(int delta) {
     setState(() => _offset += delta);
     _load();
-  }
-
-  Future<void> _payWeek() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(StringsAr.paySalaries),
-        content: const Text(StringsAr.confirmPaySalaries),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(StringsAr.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(StringsAr.save),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(employeesServiceProvider)
-          .payWeekSalaries(weekOffset: _offset);
-      await _load();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(StringsAr.salariesPaid)),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(formatAppError(e))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _undoWeek() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(StringsAr.undoPay),
-        content: const Text(StringsAr.confirmDelete),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(StringsAr.cancel),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(StringsAr.undoPay),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(employeesServiceProvider)
-          .unpayWeekSalaries(weekOffset: _offset);
-      await _load();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(formatAppError(e))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   String _weekLabel() {
@@ -176,69 +96,7 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
                     ),
             ),
           ),
-          _buildPayBar(),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPayBar() {
-    final week = _week;
-    if (_loading || week == null || week.rows.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    final unpaid = week.unpaidPayableCount;
-    final anyPaid = week.rows.any((r) => r.paid);
-
-    if (unpaid == 0 && !anyPaid) return const SizedBox.shrink();
-
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: Row(
-          children: [
-            if (anyPaid)
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _busy ? null : _undoWeek,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.error,
-                    side: const BorderSide(color: AppColors.error),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  icon: const Icon(Icons.undo_rounded),
-                  label: const Text(StringsAr.undoPay),
-                ),
-              ),
-            if (anyPaid && unpaid > 0) const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: FilledButton.icon(
-                onPressed: (_busy || unpaid == 0) ? null : _payWeek,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.success,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                icon: _busy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.payments_rounded),
-                label: Text(
-                  unpaid == 0
-                      ? StringsAr.allSalariesPaid
-                      : '${StringsAr.paySalaries} ($unpaid)',
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

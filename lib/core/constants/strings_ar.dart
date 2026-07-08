@@ -132,6 +132,7 @@ class StringsAr {
   static const undoPay = 'تراجع عن الدفع';
   static const salariesPaid = 'تم تسجيل الرواتب كمصروفات';
   static const allSalariesPaid = 'تم دفع جميع الرواتب';
+  static const noSalariesDue = 'لا رواتب مستحقة هذا الأسبوع';
   static const confirmPaySalaries =
       'تسجيل صافي رواتب هذا الأسبوع كمصروفات (بالليرة حسب سعر الصرف اليوم)؟';
 }

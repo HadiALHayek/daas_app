@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError, badRequest } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
+import { finalizeDueWeeks } from "@/lib/salary-data";
 
 interface BillRow {
   id: string;
@@ -42,6 +43,13 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getAdminClient();
+
+    // Auto-pay any finished salary weeks so they're counted as expenses here.
+    try {
+      await finalizeDueWeeks(supabase);
+    } catch (e) {
+      console.error("finalizeDueWeeks failed", e);
+    }
 
     // Fetch current exchange rate for fallback
     const { data: settings } = await supabase

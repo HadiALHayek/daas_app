@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
 import { weekWindow } from "@/lib/salary";
-import { computeWeekRows } from "@/lib/salary-data";
+import { computeWeekRows, finalizeDueWeeks } from "@/lib/salary-data";
 
 export async function GET(request: NextRequest) {
   const userId = await verifyAuth(request);
@@ -14,6 +14,14 @@ export async function GET(request: NextRequest) {
     const win = weekWindow(offset);
 
     const supabase = getAdminClient();
+
+    // Auto-pay any finished weeks before reporting (best-effort).
+    try {
+      await finalizeDueWeeks(supabase);
+    } catch (e) {
+      console.error("finalizeDueWeeks failed", e);
+    }
+
     const computed = await computeWeekRows(supabase, win);
 
     // Which employees have already been paid for this week?
