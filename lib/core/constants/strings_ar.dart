@@ -86,4 +86,14 @@ class StringsAr {
   static const directPayBills = 'فواتير البيع المباشر';
   static const payOnPreviousBill = 'دفع على فاتورة سابقة';
   static const unpaidBills = 'الفواتير غير المسددة';
+  static const account = 'الحساب';
+  static const changePassword = 'تغيير كلمة المرور';
+  static const currentPassword = 'كلمة المرور الحالية';
+  static const newPassword = 'كلمة المرور الجديدة';
+  static const confirmPassword = 'تأكيد كلمة المرور';
+  static const passwordChanged = 'تم تغيير كلمة المرور بنجاح';
+  static const passwordTooShort = 'يجب أن تكون كلمة المرور 6 أحرف على الأقل';
+  static const passwordsDoNotMatch = 'كلمتا المرور غير متطابقتين';
+  static const enterCurrentPassword = 'أدخل كلمة المرور الحالية';
+  static const enterNewPassword = 'أدخل كلمة المرور الجديدة';
 }

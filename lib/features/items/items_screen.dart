@@ -85,9 +85,13 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
         icon: const Icon(Icons.add_rounded),
         label: const Text(StringsAr.add),
       ),
-      body: _loading
-          ? const AppLoading(message: StringsAr.loading)
-          : _error != null
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: _loading
+          ? const AppLoading(key: ValueKey('loading'), message: StringsAr.loading)
+          : KeyedSubtree(
+              key: const ValueKey('content'),
+              child: _error != null
               ? EmptyState(
                   icon: Icons.error_outline,
                   title: _error!,
@@ -144,6 +148,8 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                         },
                       ),
                     ),
+            ),
+      ),
     );
   }
 }

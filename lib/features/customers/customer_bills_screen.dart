@@ -41,12 +41,26 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
           .read(customersServiceProvider)
           .getCustomerBills(widget.customerId);
 
+      // The bills endpoint already embeds the customer, so derive it from the
+      // first bill and avoid fetching the entire customer list. Only fall back
+      // to a lookup when the customer has no bills yet.
       Customer? customer;
-      final customers = await ref.read(customersServiceProvider).getCustomers();
-      for (final c in customers) {
-        if (c.id == widget.customerId) {
-          customer = c;
-          break;
+      if (bills.isNotEmpty && bills.first.customerName != null) {
+        final b = bills.first;
+        customer = Customer(
+          id: b.customerId ?? widget.customerId,
+          name: b.customerName!,
+          phone: b.customerPhone,
+          address: b.customerAddress,
+        );
+      } else {
+        final customers =
+            await ref.read(customersServiceProvider).getCustomers();
+        for (final c in customers) {
+          if (c.id == widget.customerId) {
+            customer = c;
+            break;
+          }
         }
       }
 
@@ -175,9 +189,12 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
             onPressed: _editCustomer,
           ),
       ],
-      body: _loading
-          ? const AppLoading()
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: _loading
+          ? const AppLoading(key: ValueKey('loading'))
           : Column(
+              key: const ValueKey('content'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (_customer != null)
@@ -308,6 +325,7 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
                 ),
               ],
             ),
+      ),
     );
   }
 }

@@ -150,9 +150,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
         icon: const Icon(Icons.add_rounded),
         label: const Text(StringsAr.addExpense),
       ),
-      body: _loading
-          ? const AppLoading()
-          : _loadError != null
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: _loading
+          ? const AppLoading(key: ValueKey('loading'))
+          : KeyedSubtree(
+              key: const ValueKey('content'),
+              child: _loadError != null
               ? EmptyState(
                   icon: Icons.cloud_off_outlined,
                   title: _loadError!,
@@ -204,6 +208,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                         },
                       ),
                     ),
+            ),
+      ),
     );
   }
 }

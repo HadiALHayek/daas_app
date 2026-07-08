@@ -18,16 +18,16 @@ class DashboardScreen extends ConsumerWidget {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: 190,
             pinned: true,
             backgroundColor: AppColors.primary,
             flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsetsDirectional.only(start: 20, bottom: 16),
+              titlePadding: const EdgeInsetsDirectional.only(start: 20, bottom: 14),
               title: Text(
                 StringsAr.dashboard,
                 style: GoogleFonts.cairo(
                   fontWeight: FontWeight.w800,
-                  fontSize: 20,
+                  fontSize: 18,
                 ),
               ),
               background: Container(
@@ -35,29 +35,75 @@ class DashboardScreen extends ConsumerWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topRight,
                     end: Alignment.bottomLeft,
-                    colors: [AppColors.primary, AppColors.primaryLight],
+                    colors: [
+                      AppColors.primaryLight,
+                      AppColors.primary,
+                      AppColors.primaryDark,
+                    ],
+                    stops: [0.0, 0.55, 1.0],
                   ),
                 ),
                 child: Stack(
                   children: [
                     Positioned(
-                      left: -30,
-                      top: -20,
+                      left: -40,
+                      top: -30,
                       child: Icon(
                         Icons.chair_alt_rounded,
-                        size: 140,
-                        color: Colors.white.withValues(alpha: 0.06),
+                        size: 180,
+                        color: Colors.white.withValues(alpha: 0.05),
                       ),
                     ),
-                    Positioned(
-                      right: 20,
-                      bottom: 56,
-                      left: 20,
-                      child: Text(
-                        'مرحباً بك في لوحة التحكم',
-                        style: GoogleFonts.cairo(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 14,
+                    SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 44),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: AppColors.accent.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(
+                                  color: AppColors.accent.withValues(alpha: 0.55),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.chair_alt_rounded,
+                                color: AppColors.accent,
+                                size: 28,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    StringsAr.factoryName,
+                                    style: GoogleFonts.cairo(
+                                      color: Colors.white,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      height: 1.1,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    StringsAr.appTitle,
+                                    style: GoogleFonts.cairo(
+                                      color: AppColors.accentSoft
+                                          .withValues(alpha: 0.9),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -66,18 +112,66 @@ class DashboardScreen extends ConsumerWidget {
               ),
             ),
             actions: [
-              IconButton(
-                icon: const Icon(Icons.logout_rounded),
-                tooltip: StringsAr.logout,
-                onPressed: () async {
-                  await ref.read(authServiceProvider).logout();
-                  if (context.mounted) context.go('/login');
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.account_circle_outlined),
+                tooltip: StringsAr.account,
+                onSelected: (value) async {
+                  if (value == 'change-password') {
+                    context.push('/change-password');
+                  } else if (value == 'logout') {
+                    await ref.read(authServiceProvider).logout();
+                    if (context.mounted) context.go('/login');
+                  }
                 },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'change-password',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.lock_outline_rounded),
+                      title: Text(StringsAr.changePassword),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'logout',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.logout_rounded, color: AppColors.error),
+                      title: Text(StringsAr.logout),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 4),
+              child: Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'الوحدات',
+                    style: GoogleFonts.cairo(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,

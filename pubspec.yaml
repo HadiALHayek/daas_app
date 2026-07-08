@@ -37,4 +37,5 @@ flutter:
   assets:
     - assets/fonts/Cairo-Regular.ttf
     - assets/fonts/Cairo-Bold.ttf
+    - assets/google_fonts/
     - assets/app_icon.png

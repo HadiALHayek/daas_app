@@ -63,8 +63,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [AppColors.primary, AppColors.primaryLight, AppColors.surface],
-            stops: [0.0, 0.45, 1.0],
+            colors: [AppColors.primaryDark, AppColors.primary, AppColors.surface],
+            stops: [0.0, 0.4, 1.0],
           ),
         ),
         child: SafeArea(
@@ -77,36 +77,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   children: [
                     const SizedBox(height: 24),
                     Container(
-                      width: 88,
-                      height: 88,
+                      width: 92,
+                      height: 92,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
+                        color: AppColors.accent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(26),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.3),
+                          color: AppColors.accent.withValues(alpha: 0.5),
+                          width: 1.5,
                         ),
                       ),
                       child: const Icon(
                         Icons.chair_alt_rounded,
-                        size: 44,
-                        color: Colors.white,
+                        size: 46,
+                        color: AppColors.accent,
                       ),
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      StringsAr.appTitle,
+                      StringsAr.factoryName,
                       style: GoogleFonts.cairo(
-                        fontSize: 26,
+                        fontSize: 30,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
-                      'نظام إدارة المصنع والفواتير',
+                      StringsAr.appTitle,
                       style: GoogleFonts.cairo(
-                        fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.accentSoft.withValues(alpha: 0.9),
                       ),
                     ),
                     const SizedBox(height: 32),

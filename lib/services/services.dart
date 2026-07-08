@@ -44,6 +44,20 @@ class AuthService {
   Future<void> logout() => _client.clearToken();
 
   Future<bool> isLoggedIn() => _client.hasValidSession();
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      await _client.dio.post('/api/auth/change-password', data: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      });
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
 }
 
 final authServiceProvider = Provider<AuthService>(

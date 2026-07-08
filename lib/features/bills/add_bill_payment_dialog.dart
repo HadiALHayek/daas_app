@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/strings_ar.dart';
@@ -70,6 +71,7 @@ class _BillPaymentDialogState extends State<_BillPaymentDialog> {
     if (_isSubmitting) return;
     if (!_formKey.currentState!.validate()) return;
 
+    HapticFeedback.selectionClick();
     setState(() => _isSubmitting = true);
 
     // Unfocus to avoid keyboard issues during transition

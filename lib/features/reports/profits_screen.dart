@@ -182,7 +182,9 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
   Widget _buildReport(ProfitReport report) {
     final totals = report.report;
 
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         StatMetricCard(
@@ -265,6 +267,7 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
           }),
         ],
       ],
+      ),
     );
   }
 }

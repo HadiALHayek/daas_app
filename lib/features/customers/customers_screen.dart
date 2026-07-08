@@ -168,9 +168,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         icon: const Icon(Icons.person_add_rounded),
         label: const Text(StringsAr.addCustomer),
       ),
-      body: _loading
-          ? const AppLoading()
-          : _loadError != null
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: _loading
+          ? const AppLoading(key: ValueKey('loading'))
+          : KeyedSubtree(
+              key: const ValueKey('content'),
+              child: _loadError != null
               ? EmptyState(
                   icon: Icons.cloud_off_outlined,
                   title: _loadError!,
@@ -245,6 +249,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     ],
                   ),
                 ),
+            ),
+      ),
     );
   }
 }

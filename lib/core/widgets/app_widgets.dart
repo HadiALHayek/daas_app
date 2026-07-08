@@ -326,12 +326,12 @@ class DashboardTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: color.withValues(alpha: 0.12)),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+                color: color.withValues(alpha: 0.18),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
@@ -340,23 +340,48 @@ class DashboardTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(icon, color: color, size: 26),
+                Row(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            color.withValues(alpha: 0.18),
+                            color.withValues(alpha: 0.08),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Icon(icon, color: color, size: 27),
+                    ),
+                    const Spacer(),
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.10),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 12,
+                        color: color.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ],
                 ),
                 const Spacer(),
                 Text(
                   label,
                   style: GoogleFonts.cairo(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w800,
                     color: AppColors.textPrimary,
-                    height: 1.3,
+                    height: 1.25,
                   ),
                 ),
                 if (subtitle != null) ...[
@@ -369,15 +394,6 @@ class DashboardTile extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 8),
-                Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    size: 14,
-                    color: color.withValues(alpha: 0.7),
-                  ),
-                ),
               ],
             ),
           ),
