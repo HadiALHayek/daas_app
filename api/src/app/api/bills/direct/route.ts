@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
         amount_paid: amountPaid,
         amount_remaining: remaining,
         amount_remaining_usd: remainingUsd,
+        current_rate: currentRate,
       };
     });
 

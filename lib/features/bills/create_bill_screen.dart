@@ -188,9 +188,14 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
   /// Format [amountInBillCurrency] converted into the opposite currency,
   /// e.g. "≈ 33.33 $" for a SYP bill or "≈ 500,000 ل.س" for a USD bill.
-  String _convertedLabel(double amountInBillCurrency) {
-    final other = _currency == 'SYP' ? 'USD' : 'SYP';
-    final converted = _convertBetween(amountInBillCurrency, _currency, other);
+  String _convertedLabel(double amountInBillCurrency) =>
+      _oppositeCurrencyLabel(amountInBillCurrency, _currency);
+
+  /// Convert [amount] (given in [currency]) into the other currency and format
+  /// it, e.g. "≈ 33.33 $" or "≈ 500,000 ل.س", using today's exchange rate.
+  String _oppositeCurrencyLabel(double amount, String currency) {
+    final other = currency == 'SYP' ? 'USD' : 'SYP';
+    final converted = _convertBetween(amount, currency, other);
     final label = other == 'SYP' ? StringsAr.syp : StringsAr.usd;
     return '≈ ${_priceFormat.format(converted)} $label';
   }
@@ -939,9 +944,11 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 ),
                 title: 'فاتورة #${ob.billNumber}',
                 subtitle: pending > 0
-                    ? 'الإجمالي: ${_priceFormat.format(ob.total)} ${ob.currencyLabel}\n'
+                    ? 'الإجمالي: ${_priceFormat.format(ob.total)} ${ob.currencyLabel} '
+                      '(${_oppositeCurrencyLabel(ob.total, ob.currency)})\n'
                       'دفعة جديدة: ${_priceFormat.format(pending)} ${ob.currencyLabel}'
-                    : 'الإجمالي: ${_priceFormat.format(ob.total)} ${ob.currencyLabel}',
+                    : 'الإجمالي: ${_priceFormat.format(ob.total)} ${ob.currencyLabel} '
+                      '(${_oppositeCurrencyLabel(ob.total, ob.currency)})',
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -955,6 +962,15 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             : AppColors.error,
                       ),
                     ),
+                    if (remaining > 0.001)
+                      Text(
+                        _oppositeCurrencyLabel(remaining, ob.currency),
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     if (remaining > 0.001)
                       TextButton.icon(
                         onPressed: () => _addPaymentToOldBill(ob),
@@ -987,20 +1003,39 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 ),
                 const SizedBox(height: 8),
                 ..._pendingOldBillPayments.map(
-                  (p) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('فاتورة #${p.billNumber}'),
-                    subtitle: Text(
-                      '${_priceFormat.format(p.amount)} '
-                      '${p.paymentCurrency == 'SYP' ? StringsAr.syp : StringsAr.usd}'
-                      '  •  ${StringsAr.rate}: '
-                      '1\$ = ${_priceFormat.format(_exchangeRate)} ل.س',
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      onPressed: () => _removePendingPayment(p),
-                    ),
-                  ),
+                  (p) {
+                    OutstandingBill? ob;
+                    for (final o
+                        in (_outstandingBills ?? const <OutstandingBill>[])) {
+                      if (o.id == p.billId) {
+                        ob = o;
+                        break;
+                      }
+                    }
+                    final remaining =
+                        ob != null ? _effectiveRemaining(ob) : null;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('فاتورة #${p.billNumber}'),
+                      subtitle: Text(
+                        [
+                          '${StringsAr.addPayment}: '
+                              '${_priceFormat.format(p.amount)} '
+                              '${p.paymentCurrency == 'SYP' ? StringsAr.syp : StringsAr.usd}',
+                          '${StringsAr.rate}: '
+                              '1\$ = ${_priceFormat.format(_exchangeRate)} ل.س',
+                          if (remaining != null)
+                            '${StringsAr.amountRemaining}: '
+                                '${_priceFormat.format(remaining)} ${ob!.currencyLabel} '
+                                '(${_oppositeCurrencyLabel(remaining, ob.currency)})',
+                        ].join('\n'),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                        onPressed: () => _removePendingPayment(p),
+                      ),
+                    );
+                  },
                 ),
                 Text(
                   'ستُسجّل هذه الدفعات عند إنشاء الفاتورة وتظهر في الطباعة',

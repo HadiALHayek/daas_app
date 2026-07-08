@@ -209,7 +209,6 @@ class PdfService {
                 StringsAr.paymentDate,
                 StringsAr.amount,
                 'بالدولار',
-                StringsAr.rate,
                 StringsAr.notes,
               ],
               data: (List<BillPayment>.from(bill.payments)
@@ -223,9 +222,6 @@ class PdfService {
                           '${payment.effectiveCurrency == 'USD' ? '\$' : 'ل.س'}',
                       payment.usdEquivalent != null
                           ? '\$${numberFormat.format(payment.usdEquivalent)}'
-                          : '—',
-                      payment.usdToSypRate != null
-                          ? '1\$ = ${numberFormat.format(payment.usdToSypRate)}'
                           : '—',
                       payment.notes ?? '—',
                     ],

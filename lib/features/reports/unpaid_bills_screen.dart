@@ -183,6 +183,14 @@ class _UnpaidBillsScreenState extends ConsumerState<UnpaidBillsScreen> {
                                           fontSize: 14,
                                         ),
                                       ),
+                                      if (bill.currentRate > 0)
+                                        Text(
+                                          'بسعر 1\$ = ${_priceFormat.format(bill.currentRate)} ل.س',
+                                          style: GoogleFonts.cairo(
+                                            color: AppColors.textSecondary,
+                                            fontSize: 10,
+                                          ),
+                                        ),
                                     ],
                                   ),
                                   onTap: () async {

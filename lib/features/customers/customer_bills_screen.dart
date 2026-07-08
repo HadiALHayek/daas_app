@@ -296,7 +296,7 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
                                         fontSize: 14,
                                       ),
                                     ),
-                                    if (bill.amountRemaining > 0.01)
+                                    if (bill.amountRemaining > 0.01) ...[
                                       Text(
                                         'المتبقي: ${priceFormat.format(bill.amountRemaining)} ${bill.currencyLabel}',
                                         style: GoogleFonts.cairo(
@@ -304,8 +304,16 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
                                           color: AppColors.error,
                                           fontSize: 12,
                                         ),
-                                      )
-                                    else
+                                      ),
+                                      if (bill.currentRate > 0)
+                                        Text(
+                                          'بسعر 1\$ = ${priceFormat.format(bill.currentRate)} ل.س',
+                                          style: GoogleFonts.cairo(
+                                            color: AppColors.textSecondary,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                    ] else
                                       Text(
                                         'مدفوعة بالكامل',
                                         style: GoogleFonts.cairo(
@@ -316,7 +324,10 @@ class _CustomerBillsScreenState extends ConsumerState<CustomerBillsScreen> {
                                       ),
                                   ],
                                 ),
-                                onTap: () => context.push('/bills/${bill.id}'),
+                                onTap: () async {
+                                  await context.push('/bills/${bill.id}');
+                                  _load();
+                                },
                                 onDelete: () => _deleteBill(bill),
                               );
                             },

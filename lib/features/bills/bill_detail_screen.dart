@@ -388,6 +388,18 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                                     color: AppColors.textSecondary,
                                   ),
                                 ),
+                              )
+                            else if (!_bill!.isFullyPaid &&
+                                _bill!.currentRate > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'بسعر اليوم 1\$ = ${priceFormat.format(_bill!.currentRate)} ل.س',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
                               ),
                           ],
                         ),

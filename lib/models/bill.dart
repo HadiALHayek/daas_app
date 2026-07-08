@@ -72,13 +72,19 @@ class OutstandingBill {
     required this.total,
     required this.amountRemaining,
     required this.currency,
+    this.amountRemainingUsd,
   });
 
   final String id;
   final int billNumber;
   final double total;
+
+  /// Remaining balance in the bill's currency, at the current day's rate.
   final double amountRemaining;
   final String currency;
+
+  /// Remaining balance expressed in USD, if the server provided it.
+  final double? amountRemainingUsd;
 
   factory OutstandingBill.fromJson(Map<String, dynamic> json) {
     return OutstandingBill(
@@ -87,6 +93,7 @@ class OutstandingBill {
       total: (json['total'] as num).toDouble(),
       amountRemaining: (json['amount_remaining'] as num).toDouble(),
       currency: json['currency'] as String,
+      amountRemainingUsd: (json['amount_remaining_usd'] as num?)?.toDouble(),
     );
   }
 
