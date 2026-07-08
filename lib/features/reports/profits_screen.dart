@@ -29,11 +29,6 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
   final _usdFormat = NumberFormat('#,##0.##', 'en_US');
   final _sypFormat = NumberFormat('#,###', 'ar');
 
-  static const _monthNames = [
-    'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -131,7 +126,7 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
                             items: List.generate(12, (i) {
                               return DropdownMenuItem(
                                 value: i + 1,
-                                child: Text(_monthNames[i]),
+                                child: Text('${i + 1}'),
                               );
                             }),
                             onChanged: (v) {
@@ -250,7 +245,7 @@ class _ProfitsScreenState extends ConsumerState<ProfitsScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: ListItemCard(
-                title: _monthNames[row.month - 1],
+                title: 'الشهر ${row.month}',
                 subtitle: 'المقبوض: ${_usd(row.report.collected)}\n'
                     'المتبقي: ${_usd(row.report.uncollectedUsd)} • ${_syp(row.report.uncollectedSyp)}\n'
                     'الربح الصافي: ${_usd(row.report.profit)}',

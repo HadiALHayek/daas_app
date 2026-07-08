@@ -4,6 +4,7 @@ import '../core/api/api_client.dart';
 import '../core/api/api_errors.dart';
 import '../models/bill.dart';
 import '../models/customer.dart';
+import '../models/employee.dart';
 import '../models/expense_payment.dart';
 import '../models/item.dart';
 import '../models/profit_report.dart';
@@ -450,4 +451,131 @@ class ReportsService {
 
 final reportsServiceProvider = Provider<ReportsService>(
   (ref) => ReportsService(ref.read(apiClientProvider)),
+);
+
+class EmployeesService {
+  EmployeesService(this._client);
+  final ApiClient _client;
+
+  Future<List<Employee>> getEmployees() async {
+    try {
+      final response = await _client.dio.get('/api/employees');
+      return (response.data as List)
+          .map((e) => Employee.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<Employee> createEmployee({
+    required String name,
+    required double weeklySalary,
+  }) async {
+    try {
+      final response = await _client.dio.post('/api/employees', data: {
+        'name': name,
+        'weekly_salary': weeklySalary,
+      });
+      return Employee.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<Employee> updateEmployee({
+    required String id,
+    required String name,
+    required double weeklySalary,
+  }) async {
+    try {
+      final response = await _client.dio.put('/api/employees/$id', data: {
+        'name': name,
+        'weekly_salary': weeklySalary,
+      });
+      return Employee.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<void> deleteEmployee(String id) async {
+    try {
+      await _client.dio.delete('/api/employees/$id');
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<void> startTimer(String employeeId) async {
+    try {
+      await _client.dio.post(
+        '/api/employees/$employeeId/timer',
+        data: {'action': 'start'},
+      );
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<void> stopTimer(String employeeId) async {
+    try {
+      await _client.dio.post(
+        '/api/employees/$employeeId/timer',
+        data: {'action': 'stop'},
+      );
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<List<EmployeeLoan>> getLoans(String employeeId) async {
+    try {
+      final response = await _client.dio.get('/api/employees/$employeeId/loans');
+      return (response.data as List)
+          .map((e) => EmployeeLoan.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<void> addLoan({
+    required String employeeId,
+    required double amount,
+    String? note,
+  }) async {
+    try {
+      await _client.dio.post('/api/employees/$employeeId/loans', data: {
+        'amount': amount,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<void> deleteLoan(String loanId) async {
+    try {
+      await _client.dio.delete('/api/employees/loans/$loanId');
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  Future<SalaryWeek> getSalaryTable({int weekOffset = 0}) async {
+    try {
+      final response = await _client.dio.get(
+        '/api/employees/salary',
+        queryParameters: {'week': weekOffset},
+      );
+      return SalaryWeek.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+}
+
+final employeesServiceProvider = Provider<EmployeesService>(
+  (ref) => EmployeesService(ref.read(apiClientProvider)),
 );

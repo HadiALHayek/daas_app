@@ -59,20 +59,13 @@ class DashboardScreen extends ConsumerWidget {
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 44),
                         child: Row(
                           children: [
-                            Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: AppColors.accent.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(15),
-                                border: Border.all(
-                                  color: AppColors.accent.withValues(alpha: 0.55),
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.chair_alt_rounded,
-                                color: AppColors.accent,
-                                size: 28,
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(15),
+                              child: Image.asset(
+                                'assets/app_logo.png',
+                                width: 52,
+                                height: 52,
+                                fit: BoxFit.cover,
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -221,6 +214,13 @@ class DashboardScreen extends ConsumerWidget {
                   subtitle: 'تقارير الأرباح',
                   color: AppColors.dashboardTiles[4],
                   onTap: () => context.push('/profits'),
+                ),
+                DashboardTile(
+                  icon: Icons.groups_rounded,
+                  label: StringsAr.employees,
+                  subtitle: 'الدوام والرواتب',
+                  color: AppColors.dashboardTiles[0],
+                  onTap: () => context.push('/employees'),
                 ),
               ]),
             ),

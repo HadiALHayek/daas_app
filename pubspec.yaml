@@ -24,13 +24,22 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.7
 
 flutter_launcher_icons:
   android: true
   ios: false
-  image_path: assets/app_icon.png
-  adaptive_icon_background: "#1B4D5C"
-  adaptive_icon_foreground: assets/app_icon.png
+  image_path: assets/app_logo.png
+  adaptive_icon_background: "#14303D"
+  adaptive_icon_foreground: assets/app_logo.png
+
+flutter_native_splash:
+  color: "#14303D"
+  image: assets/app_logo.png
+  android_gravity: center
+  android_12:
+    color: "#14303D"
+    image: assets/app_logo.png
 
 flutter:
   uses-material-design: true
@@ -38,4 +47,4 @@ flutter:
     - assets/fonts/Cairo-Regular.ttf
     - assets/fonts/Cairo-Bold.ttf
     - assets/google_fonts/
-    - assets/app_icon.png
+    - assets/app_logo.png

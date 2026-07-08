@@ -53,6 +53,7 @@ class StringsAr {
   static const transport = 'نقل';
   static const labor = 'أجور';
   static const other = 'أخرى';
+  static const all = 'الكل';
   static const amountPaid = 'المدفوع';
   static const amountRemaining = 'المتبقي';
   static const addPayment = 'إضافة دفعة';
@@ -99,4 +100,31 @@ class StringsAr {
   static const enterNewPassword = 'أدخل كلمة المرور الجديدة';
   static const paymentExchangeRate = 'سعر الصرف يوم الدفع';
   static const rate = 'سعر الصرف';
+
+  // Employees / salary
+  static const employees = 'الموظفون';
+  static const addEmployee = 'إضافة موظف';
+  static const editEmployee = 'تعديل موظف';
+  static const employeeName = 'اسم الموظف';
+  static const weeklySalary = 'الراتب الأسبوعي';
+  static const perMinuteRate = 'أجر الدقيقة';
+  static const startWork = 'بدء الدوام';
+  static const stopWork = 'إنهاء الدوام';
+  static const working = 'يعمل الآن';
+  static const salaryTable = 'جدول الرواتب';
+  static const regularMinutes = 'عادي (د)';
+  static const overtimeMinutes = 'إضافي (د)';
+  static const regularPay = 'الأجر العادي';
+  static const overtimePay = 'أجر الإضافي';
+  static const grossSalary = 'الإجمالي';
+  static const netSalary = 'الصافي';
+  static const loan = 'قرض';
+  static const loans = 'القروض';
+  static const addLoan = 'إضافة قرض';
+  static const loanAmount = 'مبلغ القرض';
+  static const noEmployees = 'لا يوجد موظفون';
+  static const currentWeek = 'الأسبوع الحالي';
+  static const previousWeek = 'الأسبوع السابق';
+  static const nextWeek = 'الأسبوع التالي';
+  static const week = 'الأسبوع';
 }

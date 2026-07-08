@@ -62,10 +62,20 @@ class PdfService {
     );
   }
 
+  Future<pw.MemoryImage?> _loadLogo() async {
+    try {
+      final data = await rootBundle.load('assets/app_logo.png');
+      return pw.MemoryImage(data.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<pw.Document> _buildDocument(Bill bill) async {
     await _ensureFonts();
     final arabicRegular = _regular!;
     final arabicBold = _bold!;
+    final logo = await _loadLogo();
 
     final dateFormat = DateFormat('yyyy/MM/dd', 'ar');
     final numberFormat = NumberFormat('#,##0.##', 'ar');
@@ -85,6 +95,14 @@ class PdfService {
           pw.Center(
             child: pw.Column(
               children: [
+                if (logo != null) ...[
+                  pw.ClipRRect(
+                    horizontalRadius: 12,
+                    verticalRadius: 12,
+                    child: pw.Image(logo, width: 64, height: 64),
+                  ),
+                  pw.SizedBox(height: 8),
+                ],
                 pw.Text(
                   StringsAr.factoryName,
                   style: boldStyle.copyWith(fontSize: 22),

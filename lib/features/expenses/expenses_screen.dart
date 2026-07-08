@@ -24,8 +24,22 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   bool _loading = true;
   String? _loadError;
 
+  /// Selected category filter; null means "show all".
+  String? _categoryFilter;
+
   final _priceFormat = NumberFormat('#,##0.##', 'ar');
   final _dateFormat = DateFormat('yyyy/MM/dd', 'ar');
+
+  List<ExpensePayment> get _filteredExpenses {
+    final all = _expenses ?? const <ExpensePayment>[];
+    if (_categoryFilter == null) return all;
+    return all.where((e) => e.category == _categoryFilter).toList();
+  }
+
+  /// Total of the filtered expenses expressed in USD. Each SYP expense is
+  /// converted at the exchange rate stored on the day it was paid.
+  double get _totalUsd => _filteredExpenses
+      .fold<double>(0, (sum, e) => sum + e.usdValue);
 
   @override
   void initState() {
@@ -141,6 +155,85 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     }
   }
 
+  Widget _buildCategoryFilter() {
+    Widget chip(String label, String? value) {
+      final selected = _categoryFilter == value;
+      return Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: ChoiceChip(
+          label: Text(label),
+          selected: selected,
+          labelStyle: GoogleFonts.cairo(
+            fontWeight: FontWeight.w700,
+            color: selected ? Colors.white : AppColors.textSecondary,
+            fontSize: 13,
+          ),
+          selectedColor: AppColors.primary,
+          onSelected: (_) => setState(() => _categoryFilter = value),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 52,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        children: [
+          chip(StringsAr.all, null),
+          for (final category in expenseCategories)
+            chip(expenseCategoryLabel(category), category),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTotalHeader() {
+    final label = _categoryFilter == null
+        ? 'إجمالي المصروفات'
+        : 'إجمالي ${expenseCategoryLabel(_categoryFilter!)}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: SectionCard(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.cairo(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    'محوّل للدولار بسعر يوم الدفع',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              '${_priceFormat.format(_totalUsd)} ${StringsAr.usd}',
+              style: GoogleFonts.cairo(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+                color: AppColors.error,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -176,37 +269,56 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                         label: const Text(StringsAr.addExpense),
                       ),
                     )
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _expenses!.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
-                        itemBuilder: (context, index) {
-                          final expense = _expenses![index];
-                          return ListItemCard(
-                            leading: CircleAvatar(
-                              backgroundColor:
-                                  AppColors.error.withValues(alpha: 0.1),
-                              foregroundColor: AppColors.error,
-                              child: const Icon(Icons.receipt_outlined, size: 20),
-                            ),
-                            title: expense.title,
-                            subtitle:
-                                '${expenseCategoryLabel(expense.category)}  •  '
-                                '${_dateFormat.format(expense.paymentDate)}',
-                            trailing: Text(
-                              '${_priceFormat.format(expense.amount)} ${expense.currencyLabel}',
-                              style: GoogleFonts.cairo(
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.error,
-                              ),
-                            ),
-                            onEdit: () => _editExpense(expense),
-                            onDelete: () => _deleteExpense(expense),
-                          );
-                        },
-                      ),
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildCategoryFilter(),
+                        if (_filteredExpenses.isNotEmpty) _buildTotalHeader(),
+                        Expanded(
+                          child: _filteredExpenses.isEmpty
+                              ? const EmptyState(
+                                  icon: Icons.filter_alt_off_outlined,
+                                  title: 'لا توجد مصروفات في هذا التصنيف',
+                                  subtitle: 'جرّب تصنيفاً آخر',
+                                )
+                              : RefreshIndicator(
+                                  onRefresh: _load,
+                                  child: ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        16, 4, 16, 16),
+                                    itemCount: _filteredExpenses.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 10),
+                                    itemBuilder: (context, index) {
+                                      final expense = _filteredExpenses[index];
+                                      return ListItemCard(
+                                        leading: CircleAvatar(
+                                          backgroundColor: AppColors.error
+                                              .withValues(alpha: 0.1),
+                                          foregroundColor: AppColors.error,
+                                          child: const Icon(
+                                              Icons.receipt_outlined,
+                                              size: 20),
+                                        ),
+                                        title: expense.title,
+                                        subtitle:
+                                            '${expenseCategoryLabel(expense.category)}  •  '
+                                            '${_dateFormat.format(expense.paymentDate)}',
+                                        trailing: Text(
+                                          '${_priceFormat.format(expense.amount)} ${expense.currencyLabel}',
+                                          style: GoogleFonts.cairo(
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.error,
+                                          ),
+                                        ),
+                                        onEdit: () => _editExpense(expense),
+                                        onDelete: () => _deleteExpense(expense),
+                                      );
+                                    },
+                                  ),
+                                ),
+                        ),
+                      ],
                     ),
             ),
       ),

@@ -26,7 +26,24 @@ class AppScaffold extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(7),
+              child: Image.asset(
+                'assets/app_logo.png',
+                width: 28,
+                height: 28,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(title, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
         automaticallyImplyLeading: false,
         leading: showBack && canPop
             ? IconButton(

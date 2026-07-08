@@ -43,4 +43,13 @@ class ExpensePayment {
       };
 
   String get currencyLabel => currency == 'SYP' ? 'ل.س' : r'$';
+
+  /// Value of this expense in USD. SYP expenses are converted using the rate
+  /// recorded on the day they were paid (falling back to a default only for
+  /// legacy rows that have no stored rate).
+  double get usdValue {
+    if (currency == 'USD') return amount;
+    final rate = (usdToSypRate ?? 0) > 0 ? usdToSypRate! : 15000;
+    return amount / rate;
+  }
 }

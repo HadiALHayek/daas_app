@@ -14,6 +14,8 @@ import '../features/customers/customer_bills_screen.dart';
 import '../features/customers/customers_screen.dart';
 import '../features/customers/direct_pay_bills_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
+import '../features/employees/employees_screen.dart';
+import '../features/employees/salary_table_screen.dart';
 import '../features/expenses/expenses_screen.dart';
 import '../features/items/item_form_screen.dart';
 import '../features/items/items_screen.dart';
@@ -109,6 +111,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'expenses',
             builder: (context, state) => const ExpensesScreen(),
+          ),
+          GoRoute(
+            path: 'employees',
+            builder: (context, state) => const EmployeesScreen(),
+            routes: [
+              GoRoute(
+                path: 'salary',
+                builder: (context, state) => const SalaryTableScreen(),
+              ),
+            ],
           ),
           GoRoute(
             path: 'profits',
