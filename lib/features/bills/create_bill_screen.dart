@@ -30,7 +30,8 @@ class _DraftLine {
   double quantity;
   double unitPrice;
 
-  /// Cost per unit in the bill's currency (only tracked for manual items).
+  /// Cost per unit in USD (only tracked for manual items). Independent of the
+  /// bill/paying currency.
   double? unitCost;
   bool priceEdited = false;
 
@@ -352,7 +353,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   Future<void> _addManualLine() async {
     final result = await showDialog<_ManualItemResult>(
       context: context,
-      builder: (context) => _ManualItemDialog(currencyLabel: _currencyLabel),
+      builder: (context) => const _ManualItemDialog(),
     );
     if (result == null || !mounted) return;
 
@@ -361,9 +362,12 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         _DraftLine(
           catalogItem: null,
           itemName: result.name,
-          quantity: result.quantity,
-          unitPrice: result.sellPrice,
-          unitCost: result.cost,
+          quantity: 1,
+          // The USD amount converted into the current bill currency. When the
+          // bill currency toggles, the existing conversion loop keeps this in
+          // sync. The customer pays this (in USD, or SYP at the current rate).
+          unitPrice: _convertBetween(result.costUsd, 'USD', _currency),
+          unitCost: result.costUsd,
         )..priceEdited = true,
       );
     });
@@ -641,7 +645,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                               if (line.isManual)
                                                 Text(
                                                   '${StringsAr.addManualItem}'
-                                                  '${line.unitCost != null && line.unitCost! > 0 ? ' • ${StringsAr.unitCost}: ${_priceFormat.format(line.unitCost)} $_currencyLabel' : ''}',
+                                                  '${line.unitCost != null && line.unitCost! > 0 ? ' • ${StringsAr.unitCost}: \$${_priceFormat.format(line.unitCost)}' : ''}',
                                                   style: GoogleFonts.cairo(
                                                     fontSize: 11,
                                                     color:
@@ -651,15 +655,16 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                             ],
                                           ),
                                         ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.edit_outlined,
-                                            color: AppColors.primary,
+                                        if (!line.isManual)
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.edit_outlined,
+                                              color: AppColors.primary,
+                                            ),
+                                            tooltip: 'تعديل السعر',
+                                            onPressed: () =>
+                                                _editLinePrice(index),
                                           ),
-                                          tooltip: 'تعديل السعر',
-                                          onPressed: () =>
-                                              _editLinePrice(index),
-                                        ),
                                         IconButton(
                                           icon: const Icon(
                                             Icons.delete_outline_rounded,
@@ -1134,11 +1139,11 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 for (final line in _lines) {
                   if (v == 'SYP' && oldCurrency == 'USD') {
                     line.unitPrice *= _exchangeRate;
-                    if (line.unitCost != null) line.unitCost = line.unitCost! * _exchangeRate;
                   } else if (v == 'USD' && oldCurrency == 'SYP') {
                     line.unitPrice /= _exchangeRate;
-                    if (line.unitCost != null) line.unitCost = line.unitCost! / _exchangeRate;
                   }
+                  // The manual item cost is tracked in USD and is independent
+                  // of the bill currency, so it is intentionally not converted.
                   // When switching currency, we mark as edited so the converted price is sent to the API
                   line.priceEdited = true;
                 }
@@ -1209,21 +1214,18 @@ class _EditPriceDialogState extends State<_EditPriceDialog> {
 class _ManualItemResult {
   const _ManualItemResult({
     required this.name,
-    required this.quantity,
-    required this.sellPrice,
-    required this.cost,
+    required this.costUsd,
   });
 
   final String name;
-  final double quantity;
-  final double sellPrice;
-  final double cost;
+
+  /// Price of the item in USD. This is what the customer pays for one unit:
+  /// shown as-is for a USD bill, or converted for a SYP bill.
+  final double costUsd;
 }
 
 class _ManualItemDialog extends StatefulWidget {
-  const _ManualItemDialog({required this.currencyLabel});
-
-  final String currencyLabel;
+  const _ManualItemDialog();
 
   @override
   State<_ManualItemDialog> createState() => _ManualItemDialogState();
@@ -1231,47 +1233,32 @@ class _ManualItemDialog extends StatefulWidget {
 
 class _ManualItemDialogState extends State<_ManualItemDialog> {
   final _nameController = TextEditingController();
-  final _quantityController = TextEditingController(text: '1');
-  final _sellPriceController = TextEditingController();
   final _costController = TextEditingController();
   String? _error;
 
   @override
   void dispose() {
     _nameController.dispose();
-    _quantityController.dispose();
-    _sellPriceController.dispose();
     _costController.dispose();
     super.dispose();
   }
 
   void _submit() {
     final name = _nameController.text.trim();
-    final quantity = double.tryParse(_quantityController.text.trim()) ?? 0;
-    final sellPrice = double.tryParse(_sellPriceController.text.trim());
-    final cost = double.tryParse(_costController.text.trim()) ?? 0;
+    final cost = double.tryParse(_costController.text.trim());
 
     if (name.isEmpty) {
       setState(() => _error = 'يرجى إدخال اسم الصنف');
       return;
     }
-    if (sellPrice == null || sellPrice < 0) {
-      setState(() => _error = 'يرجى إدخال سعر بيع صحيح');
-      return;
-    }
-    if (quantity <= 0) {
-      setState(() => _error = 'يرجى إدخال كمية صحيحة');
+    if (cost == null || cost <= 0) {
+      setState(() => _error = 'يرجى إدخال التكلفة بالدولار');
       return;
     }
 
     Navigator.pop(
       context,
-      _ManualItemResult(
-        name: name,
-        quantity: quantity,
-        sellPrice: sellPrice,
-        cost: cost < 0 ? 0 : cost,
-      ),
+      _ManualItemResult(name: name, costUsd: cost),
     );
   }
 
@@ -1290,26 +1277,31 @@ class _ManualItemDialogState extends State<_ManualItemDialog> {
             ),
             const SizedBox(height: 12),
             NumberTextField(
-              controller: _quantityController,
-              label: StringsAr.quantity,
-            ),
-            const SizedBox(height: 12),
-            NumberTextField(
-              controller: _sellPriceController,
-              label: '${StringsAr.sellPrice} (${widget.currencyLabel})',
-            ),
-            const SizedBox(height: 12),
-            NumberTextField(
               controller: _costController,
-              label: '${StringsAr.cost} (${widget.currencyLabel})',
+              label: '${StringsAr.cost} (\$)',
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                'التكلفة بالدولار. تُحوَّل تلقائياً لليرة حسب سعر الصرف إن كانت '
+                'الفاتورة بالليرة. عدّل الكمية بعد الإضافة.',
+                style: GoogleFonts.cairo(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
+              ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),
-              Text(
-                _error!,
-                style: GoogleFonts.cairo(
-                  color: AppColors.error,
-                  fontSize: 12,
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  _error!,
+                  style: GoogleFonts.cairo(
+                    color: AppColors.error,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ],

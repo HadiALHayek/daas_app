@@ -11,6 +11,7 @@ interface BillLineInput {
   unit_sell_price?: number;
   unit_item_cost?: number;
   item_currency?: string;
+  cost_currency?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -58,10 +59,14 @@ export async function POST(request: NextRequest) {
           unitCost = await convertToBillCurrency(Number(catalogItem.cost), catalogItem.currency, currency, rate);
         }
       } else if (line.unit_item_cost != null) {
-        // Manual (one-off) item: cost is supplied by the client in the bill's
-        // currency (converted client-side if needed).
+        // Manual (one-off) item: cost is supplied by the client in USD
+        // (cost_currency defaults to USD) and is independent of the paying
+        // currency. Convert it into the bill currency for storage/profit math.
         const suppliedCost = Number(line.unit_item_cost);
-        unitCost = Number.isFinite(suppliedCost) && suppliedCost > 0 ? suppliedCost : 0;
+        const validCost =
+          Number.isFinite(suppliedCost) && suppliedCost > 0 ? suppliedCost : 0;
+        const costCurrency = line.cost_currency ?? "USD";
+        unitCost = await convertToBillCurrency(validCost, costCurrency, currency, rate);
       }
 
       const quantity = Number(line.quantity) || 1;

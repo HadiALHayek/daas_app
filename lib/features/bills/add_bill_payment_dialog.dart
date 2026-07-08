@@ -85,18 +85,6 @@ class _BillPaymentDialogState extends State<_BillPaymentDialog> {
 
   double get _rate => widget.exchangeRate <= 0 ? 15000 : widget.exchangeRate;
 
-  /// Convert an entered amount (in [_currency]) into the bill's currency.
-  double _toBillCurrency(double entered) {
-    if (_currency == widget.billCurrency) return entered;
-    if (_currency == 'USD' && widget.billCurrency == 'SYP') {
-      return entered * _rate;
-    }
-    if (_currency == 'SYP' && widget.billCurrency == 'USD') {
-      return entered / _rate;
-    }
-    return entered;
-  }
-
   void _submit() {
     if (_isSubmitting) return;
     if (!_formKey.currentState!.validate()) return;
@@ -149,9 +137,6 @@ class _BillPaymentDialogState extends State<_BillPaymentDialog> {
               validator: (v) {
                 final n = double.tryParse(v ?? '');
                 if (n == null || n <= 0) return 'أدخل مبلغاً صحيحاً';
-                if (_toBillCurrency(n) > widget.maxAmount + 0.01) {
-                  return 'المبلغ أكبر من المتبقي';
-                }
                 return null;
               },
               onChanged: () => setState(() {}),

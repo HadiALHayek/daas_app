@@ -137,8 +137,9 @@ class BillItem {
   final double totalSell;
   final bool priceOverride;
 
-  /// Cost per unit for a manually-entered (non-catalog) item, in the bill's
-  /// currency. Null for catalog items, whose cost is resolved server-side.
+  /// Cost per unit for a manually-entered (non-catalog) item, expressed in USD
+  /// (see [toCreateJson], which tags it with cost_currency = 'USD'). Null for
+  /// catalog items, whose cost is resolved server-side.
   final double? unitItemCost;
 
   factory BillItem.fromJson(Map<String, dynamic> json) {
@@ -158,6 +159,7 @@ class BillItem {
         'quantity': quantity,
         if (priceOverride || itemId == null) 'unit_sell_price': unitSellPrice,
         if (unitItemCost != null) 'unit_item_cost': unitItemCost,
+        if (unitItemCost != null) 'cost_currency': 'USD',
       };
 
   Map<String, dynamic> toUpdateJson() => {

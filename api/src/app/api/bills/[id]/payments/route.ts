@@ -1,11 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError, notFound, badRequest } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
-import {
-  buildBillSnapshot,
-  billTotalUsd,
-  paymentUsdValue,
-} from "@/lib/bill-snapshot";
+import { buildBillSnapshot } from "@/lib/bill-snapshot";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -64,13 +60,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (billError || !bill) return notFound("الفاتورة غير موجودة");
 
-    const { data: existing, error: sumError } = await supabase
-      .from("bill_payments")
-      .select("amount, original_amount, payment_currency, usd_to_syp_rate")
-      .eq("bill_id", billId);
-
-    if (sumError) return serverError(sumError.message);
-
     let rate = 15000;
     const { data: settings } = await supabase
       .from("settings")
@@ -82,7 +71,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const billCurrency = bill.currency === "USD" ? "USD" : "SYP";
-    const billRate = Number(bill.usd_to_syp_rate) || rate;
     const paymentCurrency = body.currency === "USD" ? "USD" : "SYP";
     const originalAmount = Number(amount);
 
@@ -97,33 +85,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     amountInBillCurrency = Number(amountInBillCurrency.toFixed(2));
 
-    // Validate against the remaining debt in USD terms: the debt is pegged to
-    // its dollar value, so what matters is that we never collect more than the
-    // outstanding USD balance regardless of the currency/rate used to pay.
-    const totalUsd = billTotalUsd(Number(bill.total), billCurrency, billRate);
-    const paidUsd = (existing ?? []).reduce(
-      (sum, row) => sum + paymentUsdValue(row, billCurrency, billRate),
-      0
-    );
-    const newPaymentUsd = paymentUsdValue(
-      {
-        amount: amountInBillCurrency,
-        original_amount: originalAmount,
-        payment_currency: paymentCurrency,
-        usd_to_syp_rate: rate,
-      },
-      billCurrency,
-      billRate
-    );
-
-    if (paidUsd + newPaymentUsd > totalUsd + 0.01) {
-      const remainingUsd = Math.max(0, totalUsd - paidUsd);
-      const remainingLabel =
-        billCurrency === "USD"
-          ? `${remainingUsd.toFixed(2)} $`
-          : `${(remainingUsd * rate).toFixed(0)} ل.س`;
-      return badRequest(`المبلغ يتجاوز المتبقي على الفاتورة (${remainingLabel})`);
-    }
+    // Overpayment is intentionally allowed (e.g. rounding a 39.5 balance up to
+    // 40). Any excess simply settles the remaining balance to zero.
 
     const { error: insertError } = await supabase.from("bill_payments").insert({
       bill_id: billId,
