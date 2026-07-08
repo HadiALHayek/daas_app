@@ -127,4 +127,11 @@ class StringsAr {
   static const previousWeek = 'الأسبوع السابق';
   static const nextWeek = 'الأسبوع التالي';
   static const week = 'الأسبوع';
+  static const paySalaries = 'دفع رواتب الأسبوع';
+  static const paid = 'مدفوع';
+  static const undoPay = 'تراجع عن الدفع';
+  static const salariesPaid = 'تم تسجيل الرواتب كمصروفات';
+  static const allSalariesPaid = 'تم دفع جميع الرواتب';
+  static const confirmPaySalaries =
+      'تسجيل صافي رواتب هذا الأسبوع كمصروفات (بالليرة حسب سعر الصرف اليوم)؟';
 }

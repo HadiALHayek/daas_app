@@ -73,16 +73,49 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     }
   }
 
-  Future<void> _toggleTimer(Employee employee) async {
+  /// Reload employees without showing the full-screen loading state.
+  Future<void> _refreshSilently() async {
     try {
-      final service = ref.read(employeesServiceProvider);
-      if (employee.isRunning) {
+      final employees = await ref.read(employeesServiceProvider).getEmployees();
+      if (!mounted) return;
+      setState(() => _employees = employees);
+      _syncTicker();
+    } catch (_) {
+      // Keep whatever is on screen; a manual pull-to-refresh can retry.
+    }
+  }
+
+  Future<void> _toggleTimer(Employee employee) async {
+    final service = ref.read(employeesServiceProvider);
+    final wasRunning = employee.isRunning;
+
+    // Optimistically flip the card so the timer starts/stops instantly
+    // without a loading screen.
+    setState(() {
+      _employees = _employees!
+          .map((e) => e.id != employee.id
+              ? e
+              : Employee(
+                  id: e.id,
+                  name: e.name,
+                  weeklySalary: e.weeklySalary,
+                  currency: e.currency,
+                  activeSessionStart: wasRunning ? null : DateTime.now(),
+                ))
+          .toList();
+    });
+    _syncTicker();
+
+    try {
+      if (wasRunning) {
         await service.stopTimer(employee.id);
       } else {
         await service.startTimer(employee.id);
       }
-      await _load();
+      // Reconcile the exact server start time quietly in the background.
+      await _refreshSilently();
     } catch (e) {
+      await _refreshSilently();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(formatAppError(e))),

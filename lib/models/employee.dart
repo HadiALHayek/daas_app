@@ -74,6 +74,7 @@ class SalaryRow {
     required this.gross,
     required this.loans,
     required this.net,
+    this.paid = false,
   });
 
   final String employeeId;
@@ -88,6 +89,10 @@ class SalaryRow {
   final double loans;
   final double net;
 
+  /// Whether this week's salary has already been paid out (recorded as an
+  /// expense in the profit report).
+  final bool paid;
+
   factory SalaryRow.fromJson(Map<String, dynamic> json) {
     return SalaryRow(
       employeeId: json['employee_id'] as String,
@@ -101,6 +106,7 @@ class SalaryRow {
       gross: (json['gross'] as num?)?.toDouble() ?? 0,
       loans: (json['loans'] as num?)?.toDouble() ?? 0,
       net: (json['net'] as num?)?.toDouble() ?? 0,
+      paid: (json['paid'] as bool?) ?? false,
     );
   }
 }
@@ -117,6 +123,10 @@ class SalaryWeek {
   final DateTime weekStart;
   final DateTime weekEnd;
   final List<SalaryRow> rows;
+
+  /// Employees with a positive net that still need to be paid this week.
+  int get unpaidPayableCount =>
+      rows.where((r) => !r.paid && r.net > 0).length;
 
   factory SalaryWeek.fromJson(Map<String, dynamic> json) {
     return SalaryWeek(

@@ -35,6 +35,8 @@ export type WeekWindow = {
   endMs: number;
   startIso: string;
   endIso: string;
+  /** Local calendar date of the Saturday (YYYY-MM-DD) — stable week key. */
+  startDate: string;
 };
 
 /** Local (UTC+3) epoch ms for a given UTC epoch ms. */
@@ -72,6 +74,8 @@ export function weekWindow(offset: number, now = new Date()): WeekWindow {
     endMs,
     startIso: new Date(startMs).toISOString(),
     endIso: new Date(endMs).toISOString(),
+    // startLocal read as UTC fields yields the local wall-clock date.
+    startDate: new Date(startLocal).toISOString().slice(0, 10),
   };
 }
 

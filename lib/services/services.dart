@@ -574,6 +574,32 @@ class EmployeesService {
       throw Exception(extractApiError(e));
     }
   }
+
+  /// Pay out the given week's salaries (records them as labor expenses).
+  /// Returns the number of employees paid.
+  Future<int> payWeekSalaries({int weekOffset = 0}) async {
+    try {
+      final response = await _client.dio.post(
+        '/api/employees/salary/pay',
+        queryParameters: {'week': weekOffset},
+      );
+      return (response.data['paid_count'] as num?)?.toInt() ?? 0;
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  /// Undo a week's salary payout (removes the labor expenses too).
+  Future<void> unpayWeekSalaries({int weekOffset = 0}) async {
+    try {
+      await _client.dio.delete(
+        '/api/employees/salary/pay',
+        queryParameters: {'week': weekOffset},
+      );
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
 }
 
 final employeesServiceProvider = Provider<EmployeesService>(
