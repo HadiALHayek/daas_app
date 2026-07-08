@@ -53,6 +53,17 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
   try {
     const supabase = getAdminClient();
+
+    // Historical bill line items keep their own snapshot (name, prices, cost),
+    // so detach them from the catalog item before deleting to avoid the
+    // foreign-key constraint blocking the delete.
+    const { error: detachError } = await supabase
+      .from("bill_items")
+      .update({ item_id: null })
+      .eq("item_id", id);
+
+    if (detachError) return serverError(detachError.message);
+
     const { error } = await supabase.from("items").delete().eq("id", id);
 
     if (error) return serverError(error.message);

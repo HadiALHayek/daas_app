@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/api/api_errors.dart';
 import '../../core/constants/strings_ar.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_widgets.dart';
@@ -69,8 +70,21 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
 
     if (confirm != true) return;
 
-    await ref.read(itemsServiceProvider).deleteItem(item.id);
-    _load();
+    try {
+      await ref.read(itemsServiceProvider).deleteItem(item.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حذف الصنف')),
+        );
+      }
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
+    }
   }
 
   @override
