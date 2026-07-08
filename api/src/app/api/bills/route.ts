@@ -57,6 +57,11 @@ export async function POST(request: NextRequest) {
           }
           unitCost = await convertToBillCurrency(Number(catalogItem.cost), catalogItem.currency, currency, rate);
         }
+      } else if (line.unit_item_cost != null) {
+        // Manual (one-off) item: cost is supplied by the client in the bill's
+        // currency (converted client-side if needed).
+        const suppliedCost = Number(line.unit_item_cost);
+        unitCost = Number.isFinite(suppliedCost) && suppliedCost > 0 ? suppliedCost : 0;
       }
 
       const quantity = Number(line.quantity) || 1;

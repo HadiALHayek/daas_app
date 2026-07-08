@@ -17,15 +17,25 @@ import 'add_bill_payment_dialog.dart';
 
 class _DraftLine {
   _DraftLine({
-    required this.catalogItem,
+    this.catalogItem,
+    required this.itemName,
     required this.quantity,
     required this.unitPrice,
+    this.unitCost,
   });
 
-  final CatalogItem catalogItem;
+  /// The catalog item this line is based on, or null for a manual one-off item.
+  final CatalogItem? catalogItem;
+  final String itemName;
   double quantity;
   double unitPrice;
+
+  /// Cost per unit in the bill's currency (only tracked for manual items).
+  double? unitCost;
   bool priceEdited = false;
+
+  String? get itemId => catalogItem?.id;
+  bool get isManual => catalogItem == null;
 }
 
 class _PendingOldBillPayment {
@@ -309,7 +319,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                           setState(() {
                             for (final item in selected) {
                               final alreadyAdded = _lines.any(
-                                (line) => line.catalogItem.id == item.id,
+                                (line) => line.itemId == item.id,
                               );
                               if (!alreadyAdded) {
                                 final convertedPrice = _convertPrice(
@@ -319,6 +329,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                 _lines.add(
                                   _DraftLine(
                                     catalogItem: item,
+                                    itemName: item.name,
                                     quantity: 1,
                                     unitPrice: convertedPrice,
                                   )..priceEdited = item.currency != _currency,
@@ -336,6 +347,26 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         );
       },
     );
+  }
+
+  Future<void> _addManualLine() async {
+    final result = await showDialog<_ManualItemResult>(
+      context: context,
+      builder: (context) => _ManualItemDialog(currencyLabel: _currencyLabel),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _lines.add(
+        _DraftLine(
+          catalogItem: null,
+          itemName: result.name,
+          quantity: result.quantity,
+          unitPrice: result.sellPrice,
+          unitCost: result.cost,
+        )..priceEdited = true,
+      );
+    });
   }
 
   double get _subtotal => _lines.fold(
@@ -380,12 +411,13 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       final items = _lines
           .map(
             (line) => BillItem(
-              itemId: line.catalogItem.id,
-              itemName: line.catalogItem.name,
+              itemId: line.itemId,
+              itemName: line.itemName,
               quantity: line.quantity,
               unitSellPrice: line.unitPrice,
               totalSell: line.unitPrice * line.quantity,
-              priceOverride: line.priceEdited,
+              priceOverride: line.priceEdited || line.isManual,
+              unitItemCost: line.isManual ? (line.unitCost ?? 0) : null,
             ),
           )
           .toList();
@@ -471,7 +503,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     final newPrice = await showDialog<double>(
       context: context,
       builder: (context) => _EditPriceDialog(
-        itemName: line.catalogItem.name,
+        itemName: line.itemName,
         initialPrice: line.unitPrice,
       ),
     );
@@ -548,6 +580,17 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: _addManualLine,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 40),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            icon: const Icon(Icons.edit_note_rounded, size: 20),
+                            label: const Text(StringsAr.addManualItem),
+                          ),
+                          const SizedBox(width: 8),
                           FilledButton.tonalIcon(
                             onPressed: _addLines,
                             style: FilledButton.styleFrom(
@@ -584,12 +627,28 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                     Row(
                                       children: [
                                         Expanded(
-                                          child: Text(
-                                            line.catalogItem.name,
-                                            style: GoogleFonts.cairo(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 16,
-                                            ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                line.itemName,
+                                                style: GoogleFonts.cairo(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                              if (line.isManual)
+                                                Text(
+                                                  '${StringsAr.addManualItem}'
+                                                  '${line.unitCost != null && line.unitCost! > 0 ? ' • ${StringsAr.unitCost}: ${_priceFormat.format(line.unitCost)} $_currencyLabel' : ''}',
+                                                  style: GoogleFonts.cairo(
+                                                    fontSize: 11,
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                         ),
                                         IconButton(
@@ -1075,8 +1134,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 for (final line in _lines) {
                   if (v == 'SYP' && oldCurrency == 'USD') {
                     line.unitPrice *= _exchangeRate;
+                    if (line.unitCost != null) line.unitCost = line.unitCost! * _exchangeRate;
                   } else if (v == 'USD' && oldCurrency == 'SYP') {
                     line.unitPrice /= _exchangeRate;
+                    if (line.unitCost != null) line.unitCost = line.unitCost! / _exchangeRate;
                   }
                   // When switching currency, we mark as edited so the converted price is sent to the API
                   line.priceEdited = true;
@@ -1139,6 +1200,130 @@ class _EditPriceDialogState extends State<_EditPriceDialog> {
             Navigator.pop(context, price);
           },
           child: const Text(StringsAr.save),
+        ),
+      ],
+    );
+  }
+}
+
+class _ManualItemResult {
+  const _ManualItemResult({
+    required this.name,
+    required this.quantity,
+    required this.sellPrice,
+    required this.cost,
+  });
+
+  final String name;
+  final double quantity;
+  final double sellPrice;
+  final double cost;
+}
+
+class _ManualItemDialog extends StatefulWidget {
+  const _ManualItemDialog({required this.currencyLabel});
+
+  final String currencyLabel;
+
+  @override
+  State<_ManualItemDialog> createState() => _ManualItemDialogState();
+}
+
+class _ManualItemDialogState extends State<_ManualItemDialog> {
+  final _nameController = TextEditingController();
+  final _quantityController = TextEditingController(text: '1');
+  final _sellPriceController = TextEditingController();
+  final _costController = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _quantityController.dispose();
+    _sellPriceController.dispose();
+    _costController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    final quantity = double.tryParse(_quantityController.text.trim()) ?? 0;
+    final sellPrice = double.tryParse(_sellPriceController.text.trim());
+    final cost = double.tryParse(_costController.text.trim()) ?? 0;
+
+    if (name.isEmpty) {
+      setState(() => _error = 'يرجى إدخال اسم الصنف');
+      return;
+    }
+    if (sellPrice == null || sellPrice < 0) {
+      setState(() => _error = 'يرجى إدخال سعر بيع صحيح');
+      return;
+    }
+    if (quantity <= 0) {
+      setState(() => _error = 'يرجى إدخال كمية صحيحة');
+      return;
+    }
+
+    Navigator.pop(
+      context,
+      _ManualItemResult(
+        name: name,
+        quantity: quantity,
+        sellPrice: sellPrice,
+        cost: cost < 0 ? 0 : cost,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text(StringsAr.addManualItem),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ArabicTextField(
+              controller: _nameController,
+              label: StringsAr.itemName,
+            ),
+            const SizedBox(height: 12),
+            NumberTextField(
+              controller: _quantityController,
+              label: StringsAr.quantity,
+            ),
+            const SizedBox(height: 12),
+            NumberTextField(
+              controller: _sellPriceController,
+              label: '${StringsAr.sellPrice} (${widget.currencyLabel})',
+            ),
+            const SizedBox(height: 12),
+            NumberTextField(
+              controller: _costController,
+              label: '${StringsAr.cost} (${widget.currencyLabel})',
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                style: GoogleFonts.cairo(
+                  color: AppColors.error,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text(StringsAr.cancel),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text(StringsAr.add),
         ),
       ],
     );

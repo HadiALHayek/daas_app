@@ -35,6 +35,7 @@ class StringsAr {
   static const share = 'مشاركة';
   static const selectCustomer = 'اختر العميل';
   static const addItem = 'إضافة صنف';
+  static const addManualItem = 'صنف يدوي';
   static const createBill = 'إنشاء الفاتورة';
   static const monthly = 'شهري';
   static const yearly = 'سنوي';

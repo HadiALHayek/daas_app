@@ -126,6 +126,7 @@ class BillItem {
     required this.totalSell,
     this.itemId,
     this.priceOverride = false,
+    this.unitItemCost,
   });
 
   final String? id;
@@ -135,6 +136,10 @@ class BillItem {
   final double unitSellPrice;
   final double totalSell;
   final bool priceOverride;
+
+  /// Cost per unit for a manually-entered (non-catalog) item, in the bill's
+  /// currency. Null for catalog items, whose cost is resolved server-side.
+  final double? unitItemCost;
 
   factory BillItem.fromJson(Map<String, dynamic> json) {
     return BillItem(
@@ -151,7 +156,8 @@ class BillItem {
         if (itemId != null) 'item_id': itemId,
         'item_name': itemName,
         'quantity': quantity,
-        if (priceOverride) 'unit_sell_price': unitSellPrice,
+        if (priceOverride || itemId == null) 'unit_sell_price': unitSellPrice,
+        if (unitItemCost != null) 'unit_item_cost': unitItemCost,
       };
 
   Map<String, dynamic> toUpdateJson() => {
