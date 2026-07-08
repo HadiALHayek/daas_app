@@ -1,7 +1,11 @@
 import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError, notFound, badRequest } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
-import { buildBillSnapshot } from "@/lib/bill-snapshot";
+import {
+  buildBillSnapshot,
+  billTotalUsd,
+  paymentUsdValue,
+} from "@/lib/bill-snapshot";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -54,7 +58,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { data: bill, error: billError } = await supabase
       .from("bills")
-      .select("id, total, currency")
+      .select("id, total, currency, usd_to_syp_rate")
       .eq("id", billId)
       .single();
 
@@ -62,7 +66,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { data: existing, error: sumError } = await supabase
       .from("bill_payments")
-      .select("amount")
+      .select("amount, original_amount, payment_currency, usd_to_syp_rate")
       .eq("bill_id", billId);
 
     if (sumError) return serverError(sumError.message);
@@ -73,14 +77,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .select("usd_to_syp")
       .eq("id", 1)
       .maybeSingle();
-    if (settings) rate = Number(settings.usd_to_syp);
+    if (settings && Number(settings.usd_to_syp) > 0) {
+      rate = Number(settings.usd_to_syp);
+    }
 
     const billCurrency = bill.currency === "USD" ? "USD" : "SYP";
+    const billRate = Number(bill.usd_to_syp_rate) || rate;
     const paymentCurrency = body.currency === "USD" ? "USD" : "SYP";
     const originalAmount = Number(amount);
 
-    // Convert the entered amount into the bill's currency so the paid/remaining
-    // totals stay consistent regardless of which currency was used to pay.
+    // Convert the entered amount into the bill's currency at today's rate so the
+    // nominal `amount` column stays in the bill currency.
     let amountInBillCurrency = originalAmount;
     if (paymentCurrency !== billCurrency) {
       amountInBillCurrency =
@@ -90,16 +97,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     amountInBillCurrency = Number(amountInBillCurrency.toFixed(2));
 
-    const paidSoFar = (existing ?? []).reduce(
-      (sum, row) => sum + Number(row.amount),
+    // Validate against the remaining debt in USD terms: the debt is pegged to
+    // its dollar value, so what matters is that we never collect more than the
+    // outstanding USD balance regardless of the currency/rate used to pay.
+    const totalUsd = billTotalUsd(Number(bill.total), billCurrency, billRate);
+    const paidUsd = (existing ?? []).reduce(
+      (sum, row) => sum + paymentUsdValue(row, billCurrency, billRate),
       0
     );
-    const billTotal = Number(bill.total);
+    const newPaymentUsd = paymentUsdValue(
+      {
+        amount: amountInBillCurrency,
+        original_amount: originalAmount,
+        payment_currency: paymentCurrency,
+        usd_to_syp_rate: rate,
+      },
+      billCurrency,
+      billRate
+    );
 
-    if (paidSoFar + amountInBillCurrency > billTotal + 0.01) {
-      return badRequest(
-        `المبلغ يتجاوز المتبقي على الفاتورة (${billTotal - paidSoFar})`
-      );
+    if (paidUsd + newPaymentUsd > totalUsd + 0.01) {
+      const remainingUsd = Math.max(0, totalUsd - paidUsd);
+      const remainingLabel =
+        billCurrency === "USD"
+          ? `${remainingUsd.toFixed(2)} $`
+          : `${(remainingUsd * rate).toFixed(0)} ل.س`;
+      return badRequest(`المبلغ يتجاوز المتبقي على الفاتورة (${remainingLabel})`);
     }
 
     const { error: insertError } = await supabase.from("bill_payments").insert({

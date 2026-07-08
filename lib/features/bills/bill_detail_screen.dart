@@ -166,7 +166,7 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
         context: context,
         maxAmount: bill.amountRemaining,
         billCurrency: bill.currency,
-        exchangeRate: bill.usdToSypRate,
+        exchangeRate: bill.currentRate,
       );
       if (data == null) return;
 
@@ -375,6 +375,20 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                                   ? AppColors.success
                                   : AppColors.warning,
                             ),
+                            if (!_bill!.isFullyPaid &&
+                                _bill!.currency == 'SYP' &&
+                                _bill!.amountRemainingUsd != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'المتبقي ≈ \$${priceFormat.format(_bill!.amountRemainingUsd)} '
+                                  '(بسعر اليوم 1\$ = ${priceFormat.format(_bill!.currentRate)} ل.س)',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),

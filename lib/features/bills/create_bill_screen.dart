@@ -615,6 +615,16 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                         color: AppColors.textSecondary,
                                       ),
                                     ),
+                                    if (_currency != 'USD')
+                                      Text(
+                                        '${StringsAr.unitPrice} (\$): '
+                                        '${_priceFormat.format(_convertBetween(line.unitPrice, _currency, 'USD'))} \$',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 12,
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                     const SizedBox(height: 8),
                                     Row(
                                       children: [

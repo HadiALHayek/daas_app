@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
+import { getCurrentRate, remainingAtCurrentRate } from "@/lib/bill-snapshot";
 
 export async function GET(request: NextRequest) {
   const userId = await verifyAuth(request);
@@ -10,19 +11,41 @@ export async function GET(request: NextRequest) {
     const supabase = getAdminClient();
     const { data, error } = await supabase
       .from("bills")
-      .select("*, bill_payments(amount)")
+      .select(
+        "*, bill_payments(amount, original_amount, payment_currency, usd_to_syp_rate)"
+      )
       .is("customer_id", null)
       .not("manual_customer_name", "is", null)
       .order("created_at", { ascending: false });
 
     if (error) return serverError(error.message);
 
+    const currentRate = await getCurrentRate(supabase);
+
     const bills = (data ?? []).map((bill) => {
-      const payments = (bill.bill_payments as { amount: number }[]) ?? [];
+      const rawPayments =
+        (bill.bill_payments as Record<string, unknown>[]) ?? [];
       const amountPaid = Number(
-        payments.reduce((sum, p) => sum + Number(p.amount), 0).toFixed(2)
+        rawPayments.reduce((sum, p) => sum + Number(p.amount), 0).toFixed(2)
       );
       const total = Number(Number(bill.total).toFixed(2));
+      const billCurrency = (bill.currency as string) ?? "SYP";
+      const billRate = Number(bill.usd_to_syp_rate) || currentRate;
+
+      const { remaining, remainingUsd } = remainingAtCurrentRate({
+        total,
+        billCurrency,
+        billRate,
+        payments: rawPayments.map((p) => ({
+          amount: Number(p.amount),
+          original_amount:
+            p.original_amount == null ? null : Number(p.original_amount),
+          payment_currency: (p.payment_currency as string | null) ?? null,
+          usd_to_syp_rate:
+            p.usd_to_syp_rate == null ? null : Number(p.usd_to_syp_rate),
+        })),
+        currentRate,
+      });
 
       return {
         id: bill.id,
@@ -37,7 +60,8 @@ export async function GET(request: NextRequest) {
         manual_customer_name: bill.manual_customer_name,
         manual_customer_phone: bill.manual_customer_phone,
         amount_paid: amountPaid,
-        amount_remaining: Number((total - amountPaid).toFixed(2)),
+        amount_remaining: remaining,
+        amount_remaining_usd: remainingUsd,
       };
     });
 

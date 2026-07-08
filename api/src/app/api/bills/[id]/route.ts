@@ -7,20 +7,9 @@ import {
   badRequest,
 } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
-import { buildBillSnapshot, fetchOutstandingBills } from "@/lib/bill-snapshot";
+import { buildBillSnapshot } from "@/lib/bill-snapshot";
 
 type RouteContext = { params: { id: string } };
-
-function mapBillItem(i: Record<string, unknown>) {
-  return {
-    ...i,
-    quantity: Number(i.quantity),
-    unit_sell_price: Number(i.unit_sell_price),
-    total_sell: Number(i.total_sell),
-    unit_item_cost: Number(i.unit_item_cost ?? 0),
-    total_item_cost: Number(i.total_item_cost ?? 0),
-  };
-}
 
 function mapPayment(p: Record<string, unknown>) {
   return {
@@ -37,55 +26,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   try {
     const supabase = getAdminClient();
-
-    // Fetch bill and payments separately to ensure reliability
-    const [billResult, paymentsResult, itemsResult] = await Promise.all([
-      supabase
-        .from("bills")
-        .select("*, customers(*)")
-        .eq("id", id)
-        .single(),
-      supabase
-        .from("bill_payments")
-        .select("*")
-        .eq("bill_id", id)
-        .order("payment_date", { ascending: true }),
-      supabase
-        .from("bill_items")
-        .select("*")
-        .eq("bill_id", id)
-    ]);
-
-    if (billResult.error || !billResult.data) return notFound();
-
-    const bill = billResult.data;
-    const payments = (paymentsResult.data ?? []).map(mapPayment);
-    const items = (itemsResult.data ?? []).map(mapBillItem);
-
-    const amountPaid = Number(payments.reduce((sum, p) => sum + p.amount, 0).toFixed(2));
-    const total = Number(Number(bill.total).toFixed(2));
-
-    let outstandingBills: Awaited<ReturnType<typeof fetchOutstandingBills>> = [];
-    if (bill.customer_id) {
-      outstandingBills = await fetchOutstandingBills(
-        supabase,
-        bill.customer_id,
-        id
-      );
-    }
-
-    return Response.json({
-      ...bill,
-      usd_to_syp_rate: Number(bill.usd_to_syp_rate),
-      subtotal: Number(bill.subtotal),
-      discount: Number(bill.discount ?? 0),
-      total,
-      amount_paid: amountPaid,
-      amount_remaining: Number((total - amountPaid).toFixed(2)),
-      items,
-      payments,
-      outstanding_bills: outstandingBills,
-    });
+    const snapshot = await buildBillSnapshot(supabase, id);
+    if (!snapshot) return notFound();
+    return Response.json(snapshot);
   } catch (e) {
     return serverError(e instanceof Error ? e.message : "خطأ");
   }

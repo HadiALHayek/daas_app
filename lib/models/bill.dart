@@ -177,7 +177,9 @@ class Bill {
     this.crossBillPayments = const [],
     this.amountPaid = 0,
     this.amountRemaining = 0,
-  });
+    this.amountRemainingUsd,
+    double? currentRate,
+  }) : currentRate = currentRate ?? usdToSypRate;
 
   final String id;
   final int billNumber;
@@ -199,7 +201,17 @@ class Bill {
   final List<OutstandingBill> outstandingBills;
   final List<CrossBillPayment> crossBillPayments;
   final double amountPaid;
+
+  /// Remaining balance in the bill's currency, evaluated at the current rate
+  /// (the debt is pegged to its USD value). Server-provided when available.
   final double amountRemaining;
+
+  /// Remaining balance expressed in USD, if the server provided it.
+  final double? amountRemainingUsd;
+
+  /// Today's USD→SYP rate (used when collecting new payments). Defaults to the
+  /// bill's creation rate when the server doesn't provide a live rate.
+  final double currentRate;
 
   factory Bill.fromJson(Map<String, dynamic> json) {
     final customer = json['customers'];
@@ -226,6 +238,15 @@ class Bill {
     final finalAmountPaid = sumOfPayments > amountPaidField ? sumOfPayments : amountPaidField;
 
     final totalValue = (json['total'] as num? ?? 0).toDouble();
+
+    // Prefer the server's remaining (pegged to USD at the current rate); fall
+    // back to a nominal total-minus-paid only when it isn't provided.
+    final serverRemaining = json['amount_remaining'] as num?;
+    final amountRemainingValue = serverRemaining != null
+        ? serverRemaining.toDouble()
+        : (totalValue - finalAmountPaid).clamp(0, double.infinity).toDouble();
+    final amountRemainingUsdValue =
+        (json['amount_remaining_usd'] as num?)?.toDouble();
 
     final manualName = json['manual_customer_name'] as String?;
     final manualPhone = json['manual_customer_phone'] as String?;
@@ -259,7 +280,9 @@ class Bill {
       outstandingBills: outstanding,
       crossBillPayments: const [],
       amountPaid: finalAmountPaid,
-      amountRemaining: (totalValue - finalAmountPaid).clamp(0, double.infinity),
+      amountRemaining: amountRemainingValue,
+      amountRemainingUsd: amountRemainingUsdValue,
+      currentRate: (json['current_rate'] as num?)?.toDouble(),
     );
   }
 
@@ -290,6 +313,8 @@ class Bill {
       crossBillPayments: crossBillPayments,
       amountPaid: amountPaid,
       amountRemaining: amountRemaining,
+      amountRemainingUsd: amountRemainingUsd,
+      currentRate: currentRate,
     );
   }
 
@@ -319,6 +344,7 @@ class Bill {
       crossBillPayments: crossBillPayments,
       amountPaid: paid,
       amountRemaining: (total - paid).clamp(0, double.infinity),
+      currentRate: currentRate,
     );
   }
 
@@ -351,6 +377,8 @@ class Bill {
       crossBillPayments: crossBillPayments,
       amountPaid: amountPaid,
       amountRemaining: amountRemaining,
+      amountRemainingUsd: amountRemainingUsd,
+      currentRate: currentRate,
     );
   }
 }
