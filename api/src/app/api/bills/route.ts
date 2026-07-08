@@ -109,9 +109,12 @@ export async function POST(request: NextRequest) {
     // 5. Insert Payment if provided
     const paymentAmount = initial_payment != null ? Number(Number(initial_payment).toFixed(2)) : null;
     if (paymentAmount != null && paymentAmount > 0) {
+      const initialAmount = Math.min(paymentAmount, total);
       await supabase.from("bill_payments").insert({
         bill_id: bill.id,
-        amount: Math.min(paymentAmount, total),
+        amount: initialAmount,
+        original_amount: initialAmount,
+        payment_currency: currency,
         notes: "دفع نقدي فوراً",
         usd_to_syp_rate: rate,
       });

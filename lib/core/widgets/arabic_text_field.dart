@@ -44,11 +44,13 @@ class NumberTextField extends StatelessWidget {
     required this.controller,
     required this.label,
     this.validator,
+    this.onChanged,
   });
 
   final TextEditingController controller;
   final String label;
   final String? Function(String?)? validator;
+  final VoidCallback? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +62,7 @@ class NumberTextField extends StatelessWidget {
       textAlign: TextAlign.left,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       validator: validator,
+      onChanged: onChanged == null ? null : (_) => onChanged!(),
     );
   }
 }

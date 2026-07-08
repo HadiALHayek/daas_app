@@ -208,6 +208,7 @@ class PdfService {
               headers: [
                 StringsAr.paymentDate,
                 StringsAr.amount,
+                'بالدولار',
                 StringsAr.rate,
                 StringsAr.notes,
               ],
@@ -218,7 +219,11 @@ class PdfService {
                   .map(
                     (payment) => [
                       dateFormat.format(payment.paymentDate),
-                      '${numberFormat.format(payment.amount)} $currency',
+                      '${numberFormat.format(payment.enteredAmount)} '
+                          '${payment.effectiveCurrency == 'USD' ? '\$' : 'ل.س'}',
+                      payment.usdEquivalent != null
+                          ? '\$${numberFormat.format(payment.usdEquivalent)}'
+                          : '—',
                       payment.usdToSypRate != null
                           ? '1\$ = ${numberFormat.format(payment.usdToSypRate)}'
                           : '—',

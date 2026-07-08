@@ -165,13 +165,15 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
       final data = await showBillPaymentDialog(
         context: context,
         maxAmount: bill.amountRemaining,
-        currencyLabel: bill.currencyLabel,
+        billCurrency: bill.currency,
+        exchangeRate: bill.usdToSypRate,
       );
       if (data == null) return;
 
       final updatedBill = await ref.read(billsServiceProvider).addBillPayment(
             billId: bill.id,
             amount: data.amount,
+            currency: data.currency,
             notes: data.notes,
             currentBill: bill,
           );
@@ -413,11 +415,17 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                                 child: const Icon(Icons.payments_rounded, size: 20),
                               ),
                               title:
-                                  '${priceFormat.format(payment.amount)} ${_bill!.currencyLabel}',
+                                  '${priceFormat.format(payment.enteredAmount)} ${payment.enteredCurrencyLabel}',
                               subtitle: [
                                 dateFormat.format(payment.paymentDate),
                                 if (payment.notes?.isNotEmpty == true)
                                   payment.notes!,
+                                if (payment.effectiveCurrency == 'SYP' &&
+                                    payment.usdEquivalent != null)
+                                  '≈ \$${priceFormat.format(payment.usdEquivalent)}',
+                                if (payment.effectiveCurrency == 'USD' &&
+                                    payment.sypEquivalent != null)
+                                  '≈ ${priceFormat.format(payment.sypEquivalent)} ل.س',
                                 if (payment.usdToSypRate != null)
                                   '${StringsAr.paymentExchangeRate}: 1\$ = ${priceFormat.format(payment.usdToSypRate)} ل.س',
                               ].join('\n'),

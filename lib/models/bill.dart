@@ -5,13 +5,23 @@ class BillPayment {
     required this.paymentDate,
     this.notes,
     this.usdToSypRate,
+    this.paymentCurrency,
+    this.originalAmount,
   });
 
   final String id;
+
+  /// Amount expressed in the bill's currency (used for totals/remaining).
   final double amount;
   final DateTime paymentDate;
   final String? notes;
   final double? usdToSypRate;
+
+  /// Currency the admin actually entered the payment in ('SYP' or 'USD').
+  final String? paymentCurrency;
+
+  /// Amount as entered, in [paymentCurrency].
+  final double? originalAmount;
 
   factory BillPayment.fromJson(Map<String, dynamic> json) {
     return BillPayment(
@@ -22,7 +32,36 @@ class BillPayment {
       usdToSypRate: json['usd_to_syp_rate'] != null
           ? (json['usd_to_syp_rate'] as num).toDouble()
           : null,
+      paymentCurrency: json['payment_currency'] as String?,
+      originalAmount: json['original_amount'] != null
+          ? (json['original_amount'] as num).toDouble()
+          : null,
     );
+  }
+
+  /// The currency the payment was entered in, falling back to a plausible value.
+  String get effectiveCurrency => paymentCurrency ?? 'SYP';
+
+  /// Amount actually entered (falls back to [amount] for legacy rows).
+  double get enteredAmount => originalAmount ?? amount;
+
+  String get enteredCurrencyLabel =>
+      effectiveCurrency == 'USD' ? r'$' : 'ل.س';
+
+  /// Value of this payment in Syrian pounds, if the rate is known.
+  double? get sypEquivalent {
+    if (effectiveCurrency == 'SYP') return enteredAmount;
+    final r = usdToSypRate;
+    if (r == null) return null;
+    return enteredAmount * r; // USD -> SYP
+  }
+
+  /// Value of this payment in US dollars, if the rate is known.
+  double? get usdEquivalent {
+    if (effectiveCurrency == 'USD') return enteredAmount;
+    final r = usdToSypRate;
+    if (r == null || r == 0) return null;
+    return enteredAmount / r; // SYP -> USD
   }
 }
 

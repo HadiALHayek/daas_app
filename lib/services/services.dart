@@ -280,6 +280,7 @@ class BillsService {
   Future<Bill> addBillPayment({
     required String billId,
     required double amount,
+    String? currency,
     String? notes,
     Bill? currentBill,
   }) async {
@@ -288,6 +289,7 @@ class BillsService {
         '/api/bills/$billId/payments',
         data: {
           'amount': amount,
+          if (currency != null) 'currency': currency,
           if (notes != null) 'notes': notes,
         },
       );

@@ -8,6 +8,8 @@ function mapPayment(p: Record<string, unknown>) {
     amount: Number(p.amount),
     usd_to_syp_rate:
       p.usd_to_syp_rate == null ? null : Number(p.usd_to_syp_rate),
+    original_amount:
+      p.original_amount == null ? null : Number(p.original_amount),
   };
 }
 

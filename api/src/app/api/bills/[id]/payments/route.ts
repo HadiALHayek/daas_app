@@ -27,6 +27,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
         amount: Number(row.amount),
         usd_to_syp_rate:
           row.usd_to_syp_rate == null ? null : Number(row.usd_to_syp_rate),
+        original_amount:
+          row.original_amount == null ? null : Number(row.original_amount),
       }))
     );
   } catch (e) {
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { data: bill, error: billError } = await supabase
       .from("bills")
-      .select("id, total")
+      .select("id, total, currency")
       .eq("id", billId)
       .single();
 
@@ -65,19 +67,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (sumError) return serverError(sumError.message);
 
-    const paidSoFar = (existing ?? []).reduce(
-      (sum, row) => sum + Number(row.amount),
-      0
-    );
-    const newAmount = Number(amount);
-    const billTotal = Number(bill.total);
-
-    if (paidSoFar + newAmount > billTotal + 0.01) {
-      return badRequest(
-        `المبلغ يتجاوز المتبقي على الفاتورة (${billTotal - paidSoFar})`
-      );
-    }
-
     let rate = 15000;
     const { data: settings } = await supabase
       .from("settings")
@@ -86,9 +75,38 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .maybeSingle();
     if (settings) rate = Number(settings.usd_to_syp);
 
+    const billCurrency = bill.currency === "USD" ? "USD" : "SYP";
+    const paymentCurrency = body.currency === "USD" ? "USD" : "SYP";
+    const originalAmount = Number(amount);
+
+    // Convert the entered amount into the bill's currency so the paid/remaining
+    // totals stay consistent regardless of which currency was used to pay.
+    let amountInBillCurrency = originalAmount;
+    if (paymentCurrency !== billCurrency) {
+      amountInBillCurrency =
+        paymentCurrency === "USD"
+          ? originalAmount * rate // USD -> SYP
+          : originalAmount / rate; // SYP -> USD
+    }
+    amountInBillCurrency = Number(amountInBillCurrency.toFixed(2));
+
+    const paidSoFar = (existing ?? []).reduce(
+      (sum, row) => sum + Number(row.amount),
+      0
+    );
+    const billTotal = Number(bill.total);
+
+    if (paidSoFar + amountInBillCurrency > billTotal + 0.01) {
+      return badRequest(
+        `المبلغ يتجاوز المتبقي على الفاتورة (${billTotal - paidSoFar})`
+      );
+    }
+
     const { error: insertError } = await supabase.from("bill_payments").insert({
       bill_id: billId,
-      amount: newAmount,
+      amount: amountInBillCurrency,
+      original_amount: originalAmount,
+      payment_currency: paymentCurrency,
       notes: notes ? String(notes).trim() : null,
       payment_date: payment_date ?? new Date().toISOString(),
       usd_to_syp_rate: rate,

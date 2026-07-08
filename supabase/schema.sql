@@ -82,6 +82,8 @@ create table if not exists bill_payments (
   amount numeric not null check (amount > 0),
   notes text,
   usd_to_syp_rate numeric,
+  payment_currency text check (payment_currency in ('SYP', 'USD')),
+  original_amount numeric,
   payment_date timestamptz not null default now(),
   created_at timestamptz default now()
 );

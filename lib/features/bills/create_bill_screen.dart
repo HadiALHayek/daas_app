@@ -32,15 +32,27 @@ class _PendingOldBillPayment {
   const _PendingOldBillPayment({
     required this.billId,
     required this.billNumber,
-    required this.currency,
+    required this.billCurrency,
+    required this.paymentCurrency,
     required this.amount,
+    required this.amountInBillCurrency,
     this.notes,
   });
 
   final String billId;
   final int billNumber;
-  final String currency;
+
+  /// The old bill's own currency.
+  final String billCurrency;
+
+  /// Currency the admin entered this payment in.
+  final String paymentCurrency;
+
+  /// Amount as entered, in [paymentCurrency].
   final double amount;
+
+  /// Amount converted into the old bill's currency (for remaining math).
+  final double amountInBillCurrency;
   final String? notes;
 }
 
@@ -152,14 +164,35 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   double _effectiveRemaining(OutstandingBill ob) {
     final pending = _pendingOldBillPayments
         .where((p) => p.billId == ob.id)
-        .fold<double>(0, (sum, p) => sum + p.amount);
+        .fold<double>(0, (sum, p) => sum + p.amountInBillCurrency);
     return (ob.amountRemaining - pending).clamp(0, double.infinity);
   }
 
   double _pendingAmountForBill(String billId) {
     return _pendingOldBillPayments
         .where((p) => p.billId == billId)
-        .fold<double>(0, (sum, p) => sum + p.amount);
+        .fold<double>(0, (sum, p) => sum + p.amountInBillCurrency);
+  }
+
+  /// Convert [amount] from [fromCurrency] into [toCurrency] at the current rate.
+  double _convertBetween(double amount, String fromCurrency, String toCurrency) {
+    if (fromCurrency == toCurrency) return amount;
+    if (fromCurrency == 'USD' && toCurrency == 'SYP') {
+      return amount * _exchangeRate;
+    }
+    if (fromCurrency == 'SYP' && toCurrency == 'USD') {
+      return amount / _exchangeRate;
+    }
+    return amount;
+  }
+
+  /// Format [amountInBillCurrency] converted into the opposite currency,
+  /// e.g. "≈ 33.33 $" for a SYP bill or "≈ 500,000 ل.س" for a USD bill.
+  String _convertedLabel(double amountInBillCurrency) {
+    final other = _currency == 'SYP' ? 'USD' : 'SYP';
+    final converted = _convertBetween(amountInBillCurrency, _currency, other);
+    final label = other == 'SYP' ? StringsAr.syp : StringsAr.usd;
+    return '≈ ${_priceFormat.format(converted)} $label';
   }
 
   Future<void> _addPaymentToOldBill(OutstandingBill ob) async {
@@ -174,7 +207,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     final data = await showBillPaymentDialog(
       context: context,
       maxAmount: remaining,
-      currencyLabel: ob.currencyLabel,
+      billCurrency: ob.currency,
+      exchangeRate: _exchangeRate,
       title: '${StringsAr.payOnPreviousBill} #${ob.billNumber}',
     );
     if (data == null || !mounted) return;
@@ -184,8 +218,14 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         _PendingOldBillPayment(
           billId: ob.id,
           billNumber: ob.billNumber,
-          currency: ob.currency,
+          billCurrency: ob.currency,
+          paymentCurrency: data.currency,
           amount: data.amount,
+          amountInBillCurrency: _convertBetween(
+            data.amount,
+            data.currency,
+            ob.currency,
+          ),
           notes: data.notes,
         ),
       );
@@ -363,6 +403,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
           await ref.read(billsServiceProvider).addBillPayment(
                 billId: pending.billId,
                 amount: pending.amount,
+                currency: pending.paymentCurrency,
                 notes: pending.notes ??
                     'دفع مع فاتورة #${bill.billNumber}',
               );
@@ -370,7 +411,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             CrossBillPayment(
               billNumber: pending.billNumber,
               amount: pending.amount,
-              currency: pending.currency,
+              currency: pending.paymentCurrency,
               notes: pending.notes,
             ),
           );
@@ -603,12 +644,25 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                               setState(() => line.quantity++),
                                         ),
                                         const Spacer(),
-                                        Text(
-                                          '${_priceFormat.format(lineTotal)} $_currencyLabel',
-                                          style: GoogleFonts.cairo(
-                                            fontWeight: FontWeight.w800,
-                                            color: AppColors.primary,
-                                          ),
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              '${_priceFormat.format(lineTotal)} $_currencyLabel',
+                                              style: GoogleFonts.cairo(
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.primary,
+                                              ),
+                                            ),
+                                            Text(
+                                              _convertedLabel(lineTotal),
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 12,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
@@ -927,7 +981,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     contentPadding: EdgeInsets.zero,
                     title: Text('فاتورة #${p.billNumber}'),
                     subtitle: Text(
-                      '${_priceFormat.format(p.amount)} ${p.currency == 'SYP' ? StringsAr.syp : StringsAr.usd}',
+                      '${_priceFormat.format(p.amount)} '
+                      '${p.paymentCurrency == 'SYP' ? StringsAr.syp : StringsAr.usd}'
+                      '  •  ${StringsAr.rate}: '
+                      '1\$ = ${_priceFormat.format(_exchangeRate)} ل.س',
                     ),
                     trailing: IconButton(
                       icon: const Icon(Icons.close_rounded, size: 20),
