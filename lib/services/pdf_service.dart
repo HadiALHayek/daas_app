@@ -208,6 +208,7 @@ class PdfService {
               headers: [
                 StringsAr.paymentDate,
                 StringsAr.amount,
+                StringsAr.rate,
                 StringsAr.notes,
               ],
               data: (List<BillPayment>.from(bill.payments)
@@ -218,6 +219,9 @@ class PdfService {
                     (payment) => [
                       dateFormat.format(payment.paymentDate),
                       '${numberFormat.format(payment.amount)} $currency',
+                      payment.usdToSypRate != null
+                          ? '1\$ = ${numberFormat.format(payment.usdToSypRate)}'
+                          : '—',
                       payment.notes ?? '—',
                     ],
                   )

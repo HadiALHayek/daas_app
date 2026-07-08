@@ -414,9 +414,13 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                               ),
                               title:
                                   '${priceFormat.format(payment.amount)} ${_bill!.currencyLabel}',
-                              subtitle: payment.notes?.isNotEmpty == true
-                                  ? payment.notes!
-                                  : dateFormat.format(payment.paymentDate),
+                              subtitle: [
+                                dateFormat.format(payment.paymentDate),
+                                if (payment.notes?.isNotEmpty == true)
+                                  payment.notes!,
+                                if (payment.usdToSypRate != null)
+                                  '${StringsAr.paymentExchangeRate}: 1\$ = ${priceFormat.format(payment.usdToSypRate)} ل.س',
+                              ].join('\n'),
                             ),
                           ),
                         ),

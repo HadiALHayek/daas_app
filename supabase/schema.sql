@@ -81,6 +81,7 @@ create table if not exists bill_payments (
   bill_id uuid not null references bills(id) on delete cascade,
   amount numeric not null check (amount > 0),
   notes text,
+  usd_to_syp_rate numeric,
   payment_date timestamptz not null default now(),
   created_at timestamptz default now()
 );

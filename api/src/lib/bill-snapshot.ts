@@ -6,6 +6,8 @@ function mapPayment(p: Record<string, unknown>) {
   return {
     ...p,
     amount: Number(p.amount),
+    usd_to_syp_rate:
+      p.usd_to_syp_rate == null ? null : Number(p.usd_to_syp_rate),
   };
 }
 

@@ -96,4 +96,6 @@ class StringsAr {
   static const passwordsDoNotMatch = 'كلمتا المرور غير متطابقتين';
   static const enterCurrentPassword = 'أدخل كلمة المرور الحالية';
   static const enterNewPassword = 'أدخل كلمة المرور الجديدة';
+  static const paymentExchangeRate = 'سعر الصرف يوم الدفع';
+  static const rate = 'سعر الصرف';
 }

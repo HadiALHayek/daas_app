@@ -22,7 +22,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (error) return serverError(error.message);
 
     return Response.json(
-      (data ?? []).map((row) => ({ ...row, amount: Number(row.amount) }))
+      (data ?? []).map((row) => ({
+        ...row,
+        amount: Number(row.amount),
+        usd_to_syp_rate:
+          row.usd_to_syp_rate == null ? null : Number(row.usd_to_syp_rate),
+      }))
     );
   } catch (e) {
     return serverError(e instanceof Error ? e.message : "خطأ");
