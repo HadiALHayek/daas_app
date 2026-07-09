@@ -525,11 +525,16 @@ class EmployeesService {
     }
   }
 
-  Future<void> stopTimer(String employeeId) async {
+  /// Stops an employee's timer. When [endAt] is provided the session is closed
+  /// at that manual departure time instead of now.
+  Future<void> stopTimer(String employeeId, {DateTime? endAt}) async {
     try {
       await _client.dio.post(
         '/api/employees/$employeeId/timer',
-        data: {'action': 'stop'},
+        data: {
+          'action': 'stop',
+          if (endAt != null) 'end_at': endAt.toUtc().toIso8601String(),
+        },
       );
     } on DioException catch (e) {
       throw Exception(extractApiError(e));

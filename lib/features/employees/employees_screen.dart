@@ -193,6 +193,81 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     }
   }
 
+  /// Lets the admin pick a manual departure (end) time, then stops the timer
+  /// closing the session at that moment instead of now.
+  Future<void> _setDeparture(Employee employee) async {
+    final start = employee.activeSessionStart;
+    if (start == null) return;
+    final now = DateTime.now();
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(start.year, start.month, start.day),
+      lastDate: now,
+      helpText: StringsAr.departureTime,
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now),
+      helpText: StringsAr.departureTime,
+    );
+    if (time == null || !mounted) return;
+
+    final picked =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
+
+    if (picked.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(StringsAr.departureInFuture)),
+      );
+      return;
+    }
+    if (!picked.isAfter(start)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(StringsAr.departureBeforeArrival)),
+      );
+      return;
+    }
+
+    // Optimistically stop the card.
+    setState(() {
+      _employees = _employees!
+          .map((e) => e.id != employee.id
+              ? e
+              : Employee(
+                  id: e.id,
+                  name: e.name,
+                  weeklySalary: e.weeklySalary,
+                  currency: e.currency,
+                  activeSessionStart: null,
+                ))
+          .toList();
+    });
+    _syncTicker();
+
+    try {
+      await ref
+          .read(employeesServiceProvider)
+          .stopTimer(employee.id, endAt: picked);
+      await _refreshSilently();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(StringsAr.departureSet)),
+        );
+      }
+    } catch (e) {
+      await _refreshSilently();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
+    }
+  }
+
   Future<void> _addEmployee() async {
     final result = await showEmployeeFormDialog(context);
     if (result == null) return;
@@ -404,6 +479,9 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                     case 'arrival':
                       _setArrival(employee);
                       break;
+                    case 'departure':
+                      _setDeparture(employee);
+                      break;
                     case 'loan':
                       _addLoan(employee);
                       break;
@@ -428,6 +506,15 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                       ),
                     ),
                   ),
+                  if (running)
+                    const PopupMenuItem(
+                      value: 'departure',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.timer_off_outlined),
+                        title: Text(StringsAr.setDepartureTime),
+                      ),
+                    ),
                   const PopupMenuItem(
                     value: 'loan',
                     child: ListTile(
@@ -507,7 +594,8 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 ),
                 onPressed: () => _toggleTimer(employee),
-                onLongPress: () => _setArrival(employee),
+                onLongPress: () =>
+                    running ? _setDeparture(employee) : _setArrival(employee),
                 icon: Icon(
                   running ? Icons.stop_rounded : Icons.play_arrow_rounded,
                 ),

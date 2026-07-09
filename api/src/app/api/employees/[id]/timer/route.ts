@@ -91,9 +91,27 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (!open) {
       return badRequest("لا يوجد مؤقت قيد التشغيل");
     }
+
+    // Optional manual end (departure) time. Lets the admin backdate the stop
+    // when they forgot to press stop the moment the worker left.
+    let endAt = new Date().toISOString();
+    if (body?.end_at != null) {
+      const parsed = new Date(body.end_at);
+      if (Number.isNaN(parsed.getTime())) {
+        return badRequest("وقت غير صالح");
+      }
+      if (parsed.getTime() > Date.now() + 60_000) {
+        return badRequest("وقت الانصراف لا يمكن أن يكون في المستقبل");
+      }
+      if (parsed.getTime() <= new Date(open.start_at).getTime()) {
+        return badRequest("وقت الانصراف يجب أن يكون بعد وقت الوصول");
+      }
+      endAt = parsed.toISOString();
+    }
+
     const { data, error } = await supabase
       .from("work_sessions")
-      .update({ end_at: new Date().toISOString() })
+      .update({ end_at: endAt })
       .eq("id", open.id)
       .select()
       .single();

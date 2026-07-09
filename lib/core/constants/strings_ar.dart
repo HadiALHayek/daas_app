@@ -116,6 +116,11 @@ class StringsAr {
   static const arrivalTime = 'وقت الوصول';
   static const arrivalInFuture = 'وقت الوصول لا يمكن أن يكون في المستقبل';
   static const arrivalSet = 'تم ضبط وقت الوصول وبدء المؤقت';
+  static const setDepartureTime = 'إنهاء بوقت الانصراف';
+  static const departureTime = 'وقت الانصراف';
+  static const departureInFuture = 'وقت الانصراف لا يمكن أن يكون في المستقبل';
+  static const departureBeforeArrival = 'وقت الانصراف يجب أن يكون بعد وقت الوصول';
+  static const departureSet = 'تم تسجيل وقت الانصراف';
   static const salaryTable = 'جدول الرواتب';
   static const regularMinutes = 'عادي (د)';
   static const overtimeMinutes = 'إضافي (د)';
