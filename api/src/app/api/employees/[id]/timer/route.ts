@@ -32,17 +32,52 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const open = openSessions && openSessions.length > 0 ? openSessions[0] : null;
 
     if (action === "start") {
+      // Optional manual arrival time. Lets the user backdate the start when
+      // they forgot to press start the moment the worker arrived.
+      let startAt: string | undefined;
+      if (body?.start_at != null) {
+        const parsed = new Date(body.start_at);
+        if (Number.isNaN(parsed.getTime())) {
+          return badRequest("وقت غير صالح");
+        }
+        // Allow a small clock-skew tolerance but reject clearly future times.
+        if (parsed.getTime() > Date.now() + 60_000) {
+          return badRequest("وقت الوصول لا يمكن أن يكون في المستقبل");
+        }
+        startAt = parsed.toISOString();
+      }
+
       if (open) {
-        // Already running; return the existing session (idempotent).
+        // Already running. If a manual arrival time was provided, update the
+        // open session's start time (editing the timer). Otherwise idempotent.
+        if (startAt) {
+          const { data, error } = await supabase
+            .from("work_sessions")
+            .update({ start_at: startAt })
+            .eq("id", open.id)
+            .select()
+            .single();
+          if (error) return serverError(error.message);
+          return Response.json({
+            id: data.id,
+            start_at: data.start_at,
+            running: true,
+          });
+        }
         return Response.json({
           id: open.id,
           start_at: open.start_at,
           running: true,
         });
       }
+
+      const insertPayload: { employee_id: string; start_at?: string } = {
+        employee_id: id,
+      };
+      if (startAt) insertPayload.start_at = startAt;
       const { data, error } = await supabase
         .from("work_sessions")
-        .insert({ employee_id: id })
+        .insert(insertPayload)
         .select()
         .single();
       if (error) return serverError(error.message);

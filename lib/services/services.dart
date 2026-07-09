@@ -507,11 +507,18 @@ class EmployeesService {
     }
   }
 
-  Future<void> startTimer(String employeeId) async {
+  /// Starts (or edits) an employee's timer. When [startAt] is provided the
+  /// session is backdated to that moment, so elapsed time is computed from the
+  /// manual arrival time up to now. If the timer is already running, passing
+  /// [startAt] updates the running session's start time.
+  Future<void> startTimer(String employeeId, {DateTime? startAt}) async {
     try {
       await _client.dio.post(
         '/api/employees/$employeeId/timer',
-        data: {'action': 'start'},
+        data: {
+          'action': 'start',
+          if (startAt != null) 'start_at': startAt.toUtc().toIso8601String(),
+        },
       );
     } on DioException catch (e) {
       throw Exception(extractApiError(e));

@@ -124,6 +124,75 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     }
   }
 
+  /// Lets the user pick a manual arrival (start) time, then starts the timer
+  /// backdated to that moment — or, if the timer is already running, edits its
+  /// start time. Elapsed time is then computed from the picked time up to now.
+  Future<void> _setArrival(Employee employee) async {
+    final now = DateTime.now();
+    final initial = employee.activeSessionStart ?? now;
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial.isAfter(now) ? now : initial,
+      firstDate: now.subtract(const Duration(days: 30)),
+      lastDate: now,
+      helpText: StringsAr.arrivalTime,
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+      helpText: StringsAr.arrivalTime,
+    );
+    if (time == null || !mounted) return;
+
+    final picked =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
+
+    if (picked.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(StringsAr.arrivalInFuture)),
+      );
+      return;
+    }
+
+    // Optimistically show the backdated timer immediately.
+    setState(() {
+      _employees = _employees!
+          .map((e) => e.id != employee.id
+              ? e
+              : Employee(
+                  id: e.id,
+                  name: e.name,
+                  weeklySalary: e.weeklySalary,
+                  currency: e.currency,
+                  activeSessionStart: picked,
+                ))
+          .toList();
+    });
+    _syncTicker();
+
+    try {
+      await ref
+          .read(employeesServiceProvider)
+          .startTimer(employee.id, startAt: picked);
+      await _refreshSilently();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(StringsAr.arrivalSet)),
+        );
+      }
+    } catch (e) {
+      await _refreshSilently();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
+    }
+  }
+
   Future<void> _addEmployee() async {
     final result = await showEmployeeFormDialog(context);
     if (result == null) return;
@@ -325,13 +394,6 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                         color: AppColors.textSecondary,
                       ),
                     ),
-                    Text(
-                      '${StringsAr.perMinuteRate}: ${_numberFormat.format(employee.perMinute)} ${StringsAr.syp}',
-                      style: GoogleFonts.cairo(
-                        fontSize: 12.5,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -339,6 +401,9 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                 icon: const Icon(Icons.more_vert_rounded),
                 onSelected: (value) {
                   switch (value) {
+                    case 'arrival':
+                      _setArrival(employee);
+                      break;
                     case 'loan':
                       _addLoan(employee);
                       break;
@@ -350,8 +415,20 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                       break;
                   }
                 },
-                itemBuilder: (context) => const [
+                itemBuilder: (context) => [
                   PopupMenuItem(
+                    value: 'arrival',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.more_time_rounded),
+                      title: Text(
+                        running
+                            ? StringsAr.editArrivalTime
+                            : StringsAr.setArrivalTime,
+                      ),
+                    ),
+                  ),
+                  const PopupMenuItem(
                     value: 'loan',
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -359,7 +436,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                       title: Text(StringsAr.addLoan),
                     ),
                   ),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'edit',
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -430,6 +507,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 ),
                 onPressed: () => _toggleTimer(employee),
+                onLongPress: () => _setArrival(employee),
                 icon: Icon(
                   running ? Icons.stop_rounded : Icons.play_arrow_rounded,
                 ),

@@ -23,7 +23,6 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
   int _offset = 0;
 
   final _numberFormat = NumberFormat('#,##0', 'ar');
-  final _rateFormat = NumberFormat('#,##0.##', 'ar');
   final _dateFormat = DateFormat('yyyy/MM/dd', 'ar');
 
   @override
@@ -171,7 +170,6 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
               DataColumn(label: Text(StringsAr.name)),
               DataColumn(label: Text(StringsAr.regularMinutes), numeric: true),
               DataColumn(label: Text(StringsAr.overtimeMinutes), numeric: true),
-              DataColumn(label: Text(StringsAr.perMinuteRate), numeric: true),
               DataColumn(label: Text(StringsAr.regularPay), numeric: true),
               DataColumn(label: Text(StringsAr.overtimePay), numeric: true),
               DataColumn(label: Text(StringsAr.loans), numeric: true),
@@ -206,7 +204,6 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
       )),
       DataCell(Text(_numberFormat.format(row.regularMin))),
       DataCell(Text(_numberFormat.format(row.overtimeMin))),
-      DataCell(Text(_rateFormat.format(row.perMinute))),
       DataCell(Text(_numberFormat.format(row.regularPay))),
       DataCell(Text(_numberFormat.format(row.overtimePay))),
       DataCell(Text(
@@ -242,7 +239,6 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
       color: WidgetStateProperty.all(AppColors.primary.withValues(alpha: 0.05)),
       cells: [
         DataCell(bold(StringsAr.total)),
-        const DataCell(Text('')),
         const DataCell(Text('')),
         const DataCell(Text('')),
         DataCell(bold(_numberFormat.format(regular))),

@@ -111,6 +111,11 @@ class StringsAr {
   static const startWork = 'بدء الدوام';
   static const stopWork = 'إنهاء الدوام';
   static const working = 'يعمل الآن';
+  static const setArrivalTime = 'تحديد وقت الوصول';
+  static const editArrivalTime = 'تعديل وقت الوصول';
+  static const arrivalTime = 'وقت الوصول';
+  static const arrivalInFuture = 'وقت الوصول لا يمكن أن يكون في المستقبل';
+  static const arrivalSet = 'تم ضبط وقت الوصول وبدء المؤقت';
   static const salaryTable = 'جدول الرواتب';
   static const regularMinutes = 'عادي (د)';
   static const overtimeMinutes = 'إضافي (د)';
