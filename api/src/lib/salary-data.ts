@@ -94,8 +94,9 @@ export async function getCurrentRate(
 export async function payWeek(
   supabase: SupabaseClient,
   win: WeekWindow,
-  rate: number
-): Promise<number> {
+  rate: number,
+  overrideAmount?: number
+): Promise<{ count: number; total: number }> {
   const computed = await computeWeekRows(supabase, win);
 
   const { data: paidRows, error: paidError } = await supabase
@@ -107,12 +108,73 @@ export async function payWeek(
 
   const nowIso = new Date().toISOString();
   const weekLabel = `${win.startDate} → ${win.endIso.slice(0, 10)}`;
-  let count = 0;
 
-  for (const row of computed) {
-    if (paidSet.has(row.employeeId)) continue;
+  const payable = computed.filter(
+    (row) => !paidSet.has(row.employeeId) && row.comp.net > 0
+  );
+  if (payable.length === 0) return { count: 0, total: 0 };
+
+  const computedTotal = payable.reduce((s, r) => s + r.comp.net, 0);
+
+  // Override path (manual confirm from the salary screen): record a single
+  // combined labor expense for the admin-entered total (defaults to the
+  // computed total) instead of one expense per employee. Individual
+  // salary_payments rows are still written so the "paid" markers and the
+  // undo/unpay flow keep working.
+  if (overrideAmount != null) {
+    const insertedIds: string[] = [];
+    for (const row of payable) {
+      const { data: sp, error: spError } = await supabase
+        .from("salary_payments")
+        .insert({
+          employee_id: row.employeeId,
+          week_start: win.startDate,
+          gross: row.comp.gross,
+          loans: row.comp.loans,
+          net: row.comp.net,
+          amount: row.comp.net,
+          usd_to_syp_rate: rate,
+          paid_at: nowIso,
+        })
+        .select()
+        .single();
+      if (spError) {
+        if ((spError as { code?: string }).code === "23505") continue;
+        throw new Error(spError.message);
+      }
+      insertedIds.push(sp.id);
+    }
+    if (insertedIds.length === 0) return { count: 0, total: 0 };
+
+    const { data: expense, error: expError } = await supabase
+      .from("expense_payments")
+      .insert({
+        title: "رواتب الأسبوع",
+        category: "labor",
+        amount: overrideAmount,
+        currency: "SYP",
+        notes: `أسبوع ${weekLabel}`,
+        payment_date: nowIso,
+        usd_to_syp_rate: rate,
+      })
+      .select()
+      .single();
+    if (expError) throw new Error(expError.message);
+
+    const { error: linkError } = await supabase
+      .from("salary_payments")
+      .update({ expense_payment_id: expense.id })
+      .in("id", insertedIds);
+    if (linkError) throw new Error(linkError.message);
+
+    return { count: insertedIds.length, total: overrideAmount };
+  }
+
+  // Default path (automatic weekly finalization): one salary_payment plus one
+  // mirroring labor expense per employee.
+  let count = 0;
+  for (const row of payable) {
     const net = row.comp.net;
-    if (net <= 0) continue; // nothing to pay (or loans exceed pay)
 
     // Insert the salary record first — the unique(employee_id, week_start)
     // constraint guards against double-paying under concurrent finalizations.
@@ -159,7 +221,7 @@ export async function payWeek(
     count += 1;
   }
 
-  return count;
+  return { count, total: computedTotal };
 }
 
 /**
@@ -179,7 +241,7 @@ export async function finalizeDueWeeks(
   for (let off = 0; off >= -lookback; off--) {
     const win = weekWindow(off);
     if (win.endMs > now) continue; // week still in progress — don't pay yet
-    total += await payWeek(supabase, win, rate);
+    total += (await payWeek(supabase, win, rate)).count;
   }
   return total;
 }

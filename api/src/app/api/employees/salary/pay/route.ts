@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { verifyAuth, unauthorized, serverError } from "@/lib/auth";
+import { verifyAuth, unauthorized, serverError, badRequest } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
 import { weekWindow } from "@/lib/salary";
 import { getCurrentRate, payWeek } from "@/lib/salary-data";
@@ -28,11 +28,27 @@ export async function POST(request: NextRequest) {
     const offset = readOffset(request, body.week);
     const win = weekWindow(offset);
 
+    // Optional admin override for the total amount recorded as an expense.
+    // When present (even if unchanged), the whole week is booked as a single
+    // combined labor expense at the current (Thursday) exchange rate.
+    let overrideAmount: number | undefined;
+    if (body.amount != null) {
+      const n = Number(body.amount);
+      if (!Number.isFinite(n) || n < 0) {
+        return badRequest("مبلغ غير صالح");
+      }
+      overrideAmount = n;
+    }
+
     const supabase = getAdminClient();
     const rate = await getCurrentRate(supabase);
-    const paidCount = await payWeek(supabase, win, rate);
+    const result = await payWeek(supabase, win, rate, overrideAmount);
 
-    return Response.json({ paid_count: paidCount, rate });
+    return Response.json({
+      paid_count: result.count,
+      total: result.total,
+      rate,
+    });
   } catch (e) {
     return serverError(e instanceof Error ? e.message : "خطأ");
   }

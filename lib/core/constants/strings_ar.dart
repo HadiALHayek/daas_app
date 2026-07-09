@@ -145,4 +145,11 @@ class StringsAr {
   static const noSalariesDue = 'لا رواتب مستحقة هذا الأسبوع';
   static const confirmPaySalaries =
       'تسجيل صافي رواتب هذا الأسبوع كمصروفات (بالليرة حسب سعر الصرف اليوم)؟';
+  static const totalSalaries = 'إجمالي الرواتب';
+  static const amountToRecord = 'المبلغ المسجل (ل.س)';
+  static const recordSalaries = 'تسجيل كمصروف';
+  static const usdEquivalent = 'ما يعادل بالدولار';
+  static const invalidAmount = 'أدخل مبلغاً صحيحاً';
+  static const confirmRecordSalaries =
+      'تسجيل هذا المبلغ كمصروف رواتب لهذا الأسبوع (بالليرة حسب سعر صرف الخميس)؟';
 }

@@ -588,12 +588,15 @@ class EmployeesService {
   }
 
   /// Pay out the given week's salaries (records them as labor expenses).
-  /// Returns the number of employees paid.
-  Future<int> payWeekSalaries({int weekOffset = 0}) async {
+  /// When [amount] is provided, the whole week is booked as a single combined
+  /// labor expense for that total at the current (Thursday) exchange rate.
+  /// Returns the number of employees marked paid.
+  Future<int> payWeekSalaries({int weekOffset = 0, double? amount}) async {
     try {
       final response = await _client.dio.post(
         '/api/employees/salary/pay',
         queryParameters: {'week': weekOffset},
+        data: amount != null ? {'amount': amount} : null,
       );
       return (response.data['paid_count'] as num?)?.toInt() ?? 0;
     } on DioException catch (e) {
