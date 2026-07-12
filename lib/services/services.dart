@@ -607,6 +607,41 @@ class EmployeesService {
     }
   }
 
+  /// Manually set an employee's salary for [date] (overrides the computed pay).
+  Future<void> setDailySalary({
+    required String employeeId,
+    required DateTime date,
+    required double amount,
+  }) async {
+    try {
+      await _client.dio.put('/api/employees/salary/daily/amount', data: {
+        'employee_id': employeeId,
+        'date': _dateKey(date),
+        'amount': amount,
+      });
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  /// Remove a manual salary override so [date] reverts to computed pay.
+  Future<void> clearDailySalary({
+    required String employeeId,
+    required DateTime date,
+  }) async {
+    try {
+      await _client.dio.delete(
+        '/api/employees/salary/daily/amount',
+        queryParameters: {
+          'employee_id': employeeId,
+          'date': _dateKey(date),
+        },
+      );
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
   /// Replace an employee's sessions for [date] with a single [start]->[end]
   /// session. Passing null [start]/[end] clears the day (marks absent).
   Future<void> updateDaySession({

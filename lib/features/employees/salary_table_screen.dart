@@ -143,6 +143,91 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
     }
   }
 
+  Future<void> _editDaySalary(DailySalaryRow row) async {
+    final controller =
+        TextEditingController(text: row.pay.round().toString());
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          '${StringsAr.editDailySalary} - ${row.name}',
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9٠-٩۰-۹.,]')),
+          ],
+          decoration: const InputDecoration(
+            labelText: StringsAr.dailySalary,
+            suffixText: StringsAr.syp,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(StringsAr.cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              final raw = _normalizeDigits(controller.text)
+                  .replaceAll(',', '')
+                  .replaceAll('٬', '')
+                  .trim();
+              final v = double.tryParse(raw);
+              if (v == null || v < 0) return;
+              Navigator.pop(ctx, v);
+            },
+            child: const Text(StringsAr.save),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null) return;
+
+    try {
+      await ref.read(employeesServiceProvider).setDailySalary(
+            employeeId: row.employeeId,
+            date: _day,
+            amount: result,
+          );
+      _weekLoadedOnce = false;
+      await _loadDaily();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(StringsAr.dayUpdated)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
+    }
+  }
+
+  Future<void> _revertDaySalary(DailySalaryRow row) async {
+    try {
+      await ref.read(employeesServiceProvider).clearDailySalary(
+            employeeId: row.employeeId,
+            date: _day,
+          );
+      _weekLoadedOnce = false;
+      await _loadDaily();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
+    }
+  }
+
   void _switchToWeekly() {
     setState(() => _weeklyView = true);
     if (!_weekLoadedOnce) _load();
@@ -492,6 +577,38 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
                   ),
                 ),
                 const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Text(
+                      '${StringsAr.dailySalary}: ${_numberFormat.format(row.pay)} ${StringsAr.syp}',
+                      style: GoogleFonts.cairo(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.success,
+                      ),
+                    ),
+                    if (row.isOverride) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          StringsAr.edited,
+                          style: GoogleFonts.cairo(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.warning,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 3),
                 if (hasSession)
                   Text(
                     '${_timeFormat.format(row.start!.toLocal())}  ←  '
@@ -526,10 +643,48 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
               ],
             ),
           ),
-          IconButton(
-            tooltip: StringsAr.editDay,
-            icon: const Icon(Icons.edit_outlined, color: AppColors.primary),
-            onPressed: () => _editDay(row),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (value) {
+              switch (value) {
+                case 'time':
+                  _editDay(row);
+                  break;
+                case 'salary':
+                  _editDaySalary(row);
+                  break;
+                case 'revert':
+                  _revertDaySalary(row);
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'time',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.schedule_outlined),
+                  title: Text(StringsAr.editDay),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'salary',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.payments_outlined),
+                  title: Text(StringsAr.editDailySalary),
+                ),
+              ),
+              if (row.isOverride)
+                const PopupMenuItem(
+                  value: 'revert',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.restart_alt_rounded),
+                    title: Text(StringsAr.revertToComputed),
+                  ),
+                ),
+            ],
           ),
         ],
       ),

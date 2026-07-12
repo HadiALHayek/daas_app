@@ -34,6 +34,21 @@ create table if not exists employee_loans (
 create index if not exists idx_work_sessions_employee on work_sessions(employee_id, start_at);
 create index if not exists idx_employee_loans_employee on employee_loans(employee_id, loan_date);
 
+-- Manual per-day salary overrides. When present for a given day, this amount
+-- replaces the computed pay for that day (in the daily and weekly reports).
+create table if not exists daily_salary_overrides (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  work_date date not null,
+  amount numeric not null check (amount >= 0),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (employee_id, work_date)
+);
+
+create index if not exists idx_daily_salary_overrides_emp
+  on daily_salary_overrides(employee_id, work_date);
+
 -- Records a week's salary payout for an employee. Each payout also creates a
 -- matching row in expense_payments (category 'labor') so it shows up as an
 -- expense in the profit report. week_start is the Saturday (local) of the week.

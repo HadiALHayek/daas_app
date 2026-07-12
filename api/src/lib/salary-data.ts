@@ -45,6 +45,13 @@ export async function computeWeekRows(
     .lt("loan_date", win.endIso);
   if (loanError) throw new Error(loanError.message);
 
+  const { data: overrides, error: ovError } = await supabase
+    .from("daily_salary_overrides")
+    .select("employee_id, work_date, amount")
+    .gte("work_date", win.startDate)
+    .lt("work_date", win.endIso.slice(0, 10));
+  if (ovError) throw new Error(ovError.message);
+
   const sessionsByEmp = new Map<string, WorkSession[]>();
   for (const s of sessions ?? []) {
     const list = sessionsByEmp.get(s.employee_id) ?? [];
@@ -59,6 +66,14 @@ export async function computeWeekRows(
     loansByEmp.set(l.employee_id, list);
   }
 
+  const overridesByEmp = new Map<string, Map<string, number>>();
+  for (const o of overrides ?? []) {
+    const map = overridesByEmp.get(o.employee_id) ?? new Map<string, number>();
+    // work_date is a date column; normalize to YYYY-MM-DD.
+    map.set(String(o.work_date).slice(0, 10), Number(o.amount));
+    overridesByEmp.set(o.employee_id, map);
+  }
+
   return (employees ?? []).map((emp) => ({
     employeeId: emp.id,
     name: emp.name,
@@ -68,7 +83,8 @@ export async function computeWeekRows(
       Number(emp.weekly_salary),
       sessionsByEmp.get(emp.id) ?? [],
       loansByEmp.get(emp.id) ?? [],
-      win
+      win,
+      overridesByEmp.get(emp.id)
     ),
   }));
 }

@@ -136,6 +136,10 @@ class StringsAr {
   static const hoursWorked = 'ساعات العمل';
   static const clearDay = 'مسح (غياب)';
   static const dayUpdated = 'تم تحديث الدوام';
+  static const dailySalary = 'راتب اليوم';
+  static const editDailySalary = 'تعديل راتب اليوم';
+  static const revertToComputed = 'إلغاء التعديل (احتساب تلقائي)';
+  static const edited = 'معدّل';
   static const regularMinutes = 'عادي (د)';
   static const overtimeMinutes = 'إضافي (د)';
   static const regularPay = 'الأجر العادي';

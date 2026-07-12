@@ -126,6 +126,8 @@ class DailySalaryRow {
     required this.regularMin,
     required this.overtimeMin,
     required this.pay,
+    this.computedPay = 0,
+    this.isOverride = false,
     this.start,
     this.end,
   });
@@ -136,7 +138,15 @@ class DailySalaryRow {
   final double perMinute;
   final int regularMin;
   final int overtimeMin;
+
+  /// Effective pay for the day (manual override if set, else computed).
   final double pay;
+
+  /// The auto-computed pay from worked hours (ignoring any override).
+  final double computedPay;
+
+  /// Whether [pay] comes from a manual override.
+  final bool isOverride;
 
   /// Effective clock-in / clock-out for the day (local via .toLocal()).
   final DateTime? start;
@@ -154,6 +164,8 @@ class DailySalaryRow {
       regularMin: (json['regular_min'] as num?)?.toInt() ?? 0,
       overtimeMin: (json['overtime_min'] as num?)?.toInt() ?? 0,
       pay: (json['pay'] as num?)?.toDouble() ?? 0,
+      computedPay: (json['computed_pay'] as num?)?.toDouble() ?? 0,
+      isOverride: (json['is_override'] as bool?) ?? false,
       start: json['start_at'] != null
           ? DateTime.parse(json['start_at'] as String)
           : null,

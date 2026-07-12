@@ -40,6 +40,17 @@ export async function GET(request: NextRequest) {
       .lt("start_at", win.endIso);
     if (sessError) return serverError(sessError.message);
 
+    // Manual salary overrides for this day.
+    const { data: overrides, error: ovError } = await supabase
+      .from("daily_salary_overrides")
+      .select("employee_id, amount")
+      .eq("work_date", win.date);
+    if (ovError) return serverError(ovError.message);
+    const overrideByEmp = new Map<string, number>();
+    for (const o of overrides ?? []) {
+      overrideByEmp.set(o.employee_id, Number(o.amount));
+    }
+
     const byEmp = new Map<string, WorkSession[]>();
     for (const s of sessions ?? []) {
       const list = byEmp.get(s.employee_id) ?? [];
@@ -58,7 +69,11 @@ export async function GET(request: NextRequest) {
         win.startMs,
         win.endMs
       );
-      const pay = regularMin * perMinute + overtimeMin * perMinute * 1.5;
+      const computedPay =
+        regularMin * perMinute + overtimeMin * perMinute * 1.5;
+      const override = overrideByEmp.get(emp.id);
+      const isOverride = override != null;
+      const pay = isOverride ? override : computedPay;
 
       // Effective clock-in/out for display: earliest start, latest end.
       let start: string | null = null;
@@ -76,6 +91,8 @@ export async function GET(request: NextRequest) {
         regular_min: regularMin,
         overtime_min: overtimeMin,
         pay,
+        computed_pay: computedPay,
+        is_override: isOverride,
         start_at: start,
         end_at: end,
       };
@@ -140,6 +157,15 @@ export async function PUT(request: NextRequest) {
         .insert({ employee_id: employeeId, start_at: startIso, end_at: endIso });
       if (insError) return serverError(insError.message);
     }
+
+    // Editing the working time recomputes pay, so drop any manual salary
+    // override for this day.
+    const { error: ovDelError } = await supabase
+      .from("daily_salary_overrides")
+      .delete()
+      .eq("employee_id", employeeId)
+      .eq("work_date", win.date);
+    if (ovDelError) return serverError(ovDelError.message);
 
     return Response.json({ success: true });
   } catch (e) {

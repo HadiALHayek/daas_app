@@ -179,11 +179,32 @@ export function splitSessions(
   return { regularMin, overtimeMin };
 }
 
+/** Local (UTC+3) calendar date (YYYY-MM-DD) for a UTC epoch ms. */
+export function localDateStr(ms: number): string {
+  return new Date(toLocal(ms)).toISOString().slice(0, 10);
+}
+
+/** Computed pay for a single day's sessions (regular + 1.5x overtime). */
+export function computeDayPay(
+  sessions: WorkSession[],
+  dayStartMs: number,
+  dayEndMs: number,
+  perMinute: number
+): number {
+  const { regularMin, overtimeMin } = splitSessions(
+    sessions,
+    dayStartMs,
+    dayEndMs
+  );
+  return regularMin * perMinute + overtimeMin * perMinute * 1.5;
+}
+
 export function computeSalary(
   weeklySalary: number,
   sessions: WorkSession[],
   loans: LoanRow[],
-  win: WeekWindow
+  win: WeekWindow,
+  overrides?: Map<string, number>
 ): SalaryComputation {
   const perMinute = weeklySalary > 0 ? weeklySalary / WEEK_MINUTES : 0;
   const { regularMin, overtimeMin } = splitSessions(
@@ -194,7 +215,22 @@ export function computeSalary(
 
   const regularPay = regularMin * perMinute;
   const overtimePay = overtimeMin * perMinute * 1.5;
-  const gross = regularPay + overtimePay;
+
+  // Gross = sum of each day's effective pay (manual override when set, else the
+  // computed pay). Without overrides this equals regularPay + overtimePay,
+  // because splitSessions already sums minutes day by day.
+  let gross = 0;
+  const numDays = Math.round((win.endMs - win.startMs) / DAY_MS);
+  for (let i = 0; i < numDays; i++) {
+    const dayStartMs = win.startMs + i * DAY_MS;
+    const dayEndMs = dayStartMs + DAY_MS;
+    const override = overrides?.get(localDateStr(dayStartMs));
+    gross +=
+      override != null
+        ? override
+        : computeDayPay(sessions, dayStartMs, dayEndMs, perMinute);
+  }
+
   const loansTotal = loans.reduce((sum, l) => sum + Number(l.amount), 0);
   const net = gross - loansTotal;
 
