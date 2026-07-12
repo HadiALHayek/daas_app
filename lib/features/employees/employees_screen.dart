@@ -14,6 +14,7 @@ import '../../models/employee.dart';
 import '../../services/services.dart';
 import 'add_loan_dialog.dart';
 import 'employee_form_dialog.dart';
+import 'employee_loans_dialog.dart';
 
 class EmployeesScreen extends ConsumerStatefulWidget {
   const EmployeesScreen({super.key});
@@ -101,6 +102,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                   weeklySalary: e.weeklySalary,
                   currency: e.currency,
                   activeSessionStart: wasRunning ? null : DateTime.now(),
+                  weekLoans: e.weekLoans,
                 ))
           .toList();
     });
@@ -168,6 +170,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                   weeklySalary: e.weeklySalary,
                   currency: e.currency,
                   activeSessionStart: picked,
+                  weekLoans: e.weekLoans,
                 ))
           .toList();
     });
@@ -243,6 +246,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                   weeklySalary: e.weeklySalary,
                   currency: e.currency,
                   activeSessionStart: null,
+                  weekLoans: e.weekLoans,
                 ))
           .toList();
     });
@@ -252,6 +256,65 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
       await ref
           .read(employeesServiceProvider)
           .stopTimer(employee.id, endAt: picked);
+      await _refreshSilently();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(StringsAr.departureSet)),
+        );
+      }
+    } catch (e) {
+      await _refreshSilently();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
+    }
+  }
+
+  /// Stops the timer at 17:00 (end of the work day) of the day the session
+  /// started — for when the admin forgot to stop at closing time.
+  Future<void> _stopAtEndOfDay(Employee employee) async {
+    final start = employee.activeSessionStart;
+    if (start == null) return;
+    final localStart = start.toLocal();
+    final endOfDay =
+        DateTime(localStart.year, localStart.month, localStart.day, 17, 0);
+
+    if (!endOfDay.isAfter(localStart)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(StringsAr.departureBeforeArrival)),
+      );
+      return;
+    }
+    if (endOfDay.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(StringsAr.departureInFuture)),
+      );
+      return;
+    }
+
+    // Optimistically stop the card.
+    setState(() {
+      _employees = _employees!
+          .map((e) => e.id != employee.id
+              ? e
+              : Employee(
+                  id: e.id,
+                  name: e.name,
+                  weeklySalary: e.weeklySalary,
+                  currency: e.currency,
+                  activeSessionStart: null,
+                  weekLoans: e.weekLoans,
+                ))
+          .toList();
+    });
+    _syncTicker();
+
+    try {
+      await ref
+          .read(employeesServiceProvider)
+          .stopTimer(employee.id, endAt: endOfDay);
       await _refreshSilently();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -349,6 +412,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
             amount: result.amount,
             note: result.note,
           );
+      await _refreshSilently();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تمت إضافة القرض')),
@@ -361,6 +425,11 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
         );
       }
     }
+  }
+
+  Future<void> _manageLoans(Employee employee) async {
+    final changed = await showEmployeeLoansDialog(context, employee);
+    if (changed == true) await _refreshSilently();
   }
 
   String _formatElapsed(DateTime start) {
@@ -469,6 +538,28 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                         color: AppColors.textSecondary,
                       ),
                     ),
+                    if (employee.weekLoans > 0) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.request_quote_outlined,
+                            size: 13,
+                            color: AppColors.warning,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${StringsAr.loansThisWeek}: ${_numberFormat.format(employee.weekLoans)} ${StringsAr.syp}',
+                            style: GoogleFonts.cairo(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.warning,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -484,6 +575,9 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                       break;
                     case 'loan':
                       _addLoan(employee);
+                      break;
+                    case 'loans':
+                      _manageLoans(employee);
                       break;
                     case 'edit':
                       _editEmployee(employee);
@@ -521,6 +615,14 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.request_quote_outlined),
                       title: Text(StringsAr.addLoan),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'loans',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.account_balance_wallet_outlined),
+                      title: Text(StringsAr.manageLoans),
                     ),
                   ),
                   const PopupMenuItem(
@@ -587,6 +689,21 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                 ),
               ),
               const SizedBox(width: 12),
+              if (running) ...[
+                Tooltip(
+                  message: StringsAr.stopAtEndOfDay,
+                  child: IconButton.filledTonal(
+                    onPressed: () => _stopAtEndOfDay(employee),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.accentSoft,
+                      foregroundColor: AppColors.warning,
+                      padding: const EdgeInsets.all(14),
+                    ),
+                    icon: const Icon(Icons.wb_twilight_rounded),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
               FilledButton.icon(
                 style: FilledButton.styleFrom(
                   backgroundColor:

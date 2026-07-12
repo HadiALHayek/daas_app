@@ -36,6 +36,17 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     return all.where((e) => e.category == _categoryFilter).toList();
   }
 
+  /// Category • date, plus the exchange rate that was in effect the day the
+  /// expense was entered (only meaningful for SYP expenses).
+  String _expenseSubtitle(ExpensePayment expense) {
+    final base =
+        '${expenseCategoryLabel(expense.category)}  •  ${_dateFormat.format(expense.paymentDate)}';
+    if (expense.currency == 'SYP' && (expense.usdToSypRate ?? 0) > 0) {
+      return '$base  •  ${StringsAr.rate}: ${_priceFormat.format(expense.usdToSypRate)}';
+    }
+    return base;
+  }
+
   /// Total of the filtered expenses expressed in USD. Each SYP expense is
   /// converted at the exchange rate stored on the day it was paid.
   double get _totalUsd => _filteredExpenses
@@ -301,9 +312,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                                               size: 20),
                                         ),
                                         title: expense.title,
-                                        subtitle:
-                                            '${expenseCategoryLabel(expense.category)}  •  '
-                                            '${_dateFormat.format(expense.paymentDate)}',
+                                        subtitle: _expenseSubtitle(expense),
                                         trailing: Text(
                                           '${_priceFormat.format(expense.amount)} ${expense.currencyLabel}',
                                           style: GoogleFonts.cairo(

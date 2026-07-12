@@ -14,6 +14,11 @@ export const WEEK_MINUTES = 9 * 60 * 6; // 3240
 const REGULAR_START_HOUR = 8;
 const REGULAR_END_HOUR = 17;
 
+// Morning start grace: clocking in between 08:00 and 08:15 (inclusive) counts
+// as an 08:00 start with no deduction. Clocking in at 08:16+ counts from the
+// actual arrival time (those minutes are deducted from pay).
+export const START_GRACE_MINUTES = 15;
+
 export type WorkSession = { start_at: string; end_at: string | null };
 export type LoanRow = { amount: number; loan_date: string };
 
@@ -79,6 +84,37 @@ export function weekWindow(offset: number, now = new Date()): WeekWindow {
   };
 }
 
+export type DayWindow = {
+  startMs: number;
+  endMs: number;
+  startIso: string;
+  endIso: string;
+  /** Local calendar date (YYYY-MM-DD). */
+  date: string;
+};
+
+/**
+ * Day window for a local (UTC+3) calendar date 'YYYY-MM-DD', running from local
+ * 00:00 to the next local 00:00.
+ */
+export function dayWindow(dateStr: string): DayWindow {
+  const parts = dateStr.split("-").map((v) => parseInt(v, 10));
+  const y = parts[0];
+  const m = parts[1] || 1;
+  const d = parts[2] || 1;
+  // Local midnight expressed as a UTC epoch, then shifted to true UTC.
+  const startLocal = Date.UTC(y, m - 1, d);
+  const startMs = toUtc(startLocal);
+  const endMs = startMs + DAY_MS;
+  return {
+    startMs,
+    endMs,
+    startIso: new Date(startMs).toISOString(),
+    endIso: new Date(endMs).toISOString(),
+    date: new Date(startLocal).toISOString().slice(0, 10),
+  };
+}
+
 /** Overlap in ms between [aStart,aEnd) and [bStart,bEnd). */
 function overlap(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
   return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
@@ -108,7 +144,18 @@ export function splitSessions(
     if (end <= start) continue;
 
     // Work in local time, walking one calendar day at a time.
-    let curLocal = toLocal(start);
+    let startLocal = toLocal(start);
+
+    // Apply the morning start grace: if the worker clocked in within the first
+    // 15 minutes after 08:00, treat the session as starting exactly at 08:00.
+    const sessionDayStart = localMidnight(startLocal);
+    const regularStartLocal = sessionDayStart + REGULAR_START_HOUR * HOUR_MS;
+    const graceEndLocal = regularStartLocal + START_GRACE_MINUTES * 60000;
+    if (startLocal > regularStartLocal && startLocal <= graceEndLocal) {
+      startLocal = regularStartLocal;
+    }
+
+    let curLocal = startLocal;
     const endLocal = toLocal(end);
     while (curLocal < endLocal) {
       const dayStart = localMidnight(curLocal);

@@ -567,9 +567,61 @@ class EmployeesService {
     }
   }
 
+  Future<void> updateLoan({
+    required String loanId,
+    required double amount,
+    String? note,
+  }) async {
+    try {
+      await _client.dio.put('/api/employees/loans/$loanId', data: {
+        'amount': amount,
+        'note': note ?? '',
+      });
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
   Future<void> deleteLoan(String loanId) async {
     try {
       await _client.dio.delete('/api/employees/loans/$loanId');
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  static String _dateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+
+  Future<DailySalaryReport> getDailyReport(DateTime date) async {
+    try {
+      final response = await _client.dio.get(
+        '/api/employees/salary/daily',
+        queryParameters: {'date': _dateKey(date)},
+      );
+      return DailySalaryReport.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(extractApiError(e));
+    }
+  }
+
+  /// Replace an employee's sessions for [date] with a single [start]->[end]
+  /// session. Passing null [start]/[end] clears the day (marks absent).
+  Future<void> updateDaySession({
+    required String employeeId,
+    required DateTime date,
+    DateTime? start,
+    DateTime? end,
+  }) async {
+    try {
+      await _client.dio.put('/api/employees/salary/daily', data: {
+        'employee_id': employeeId,
+        'date': _dateKey(date),
+        'start_at': start?.toUtc().toIso8601String(),
+        'end_at': end?.toUtc().toIso8601String(),
+      });
     } on DioException catch (e) {
       throw Exception(extractApiError(e));
     }

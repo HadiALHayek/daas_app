@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../../models/employee.dart';
 import '../../services/services.dart';
+import 'day_session_edit_dialog.dart';
 
 class SalaryTableScreen extends ConsumerStatefulWidget {
   const SalaryTableScreen({super.key});
@@ -19,28 +20,137 @@ class SalaryTableScreen extends ConsumerStatefulWidget {
 }
 
 class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
+  // View mode: daily report first, weekly report behind a toggle.
+  bool _weeklyView = false;
+
+  // Weekly state.
   SalaryWeek? _week;
   bool _loading = true;
   String? _error;
   int _offset = 0;
   double? _rate;
   bool _paying = false;
+  bool _weekLoadedOnce = false;
+
+  // Daily state.
+  late DateTime _day = _todayLocalDate();
+  DailySalaryReport? _dailyReport;
+  bool _dailyLoading = true;
+  String? _dailyError;
 
   final _totalController = TextEditingController();
   final _numberFormat = NumberFormat('#,##0', 'ar');
   final _usdFormat = NumberFormat('#,##0.##', 'ar');
   final _dateFormat = DateFormat('yyyy/MM/dd', 'ar');
+  final _dayLabelFormat = DateFormat('EEEE، yyyy/MM/dd', 'ar');
+  final _timeFormat = DateFormat('hh:mm a', 'ar');
+
+  static DateTime _todayLocalDate() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadDaily();
   }
 
   @override
   void dispose() {
     _totalController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadDaily() async {
+    if (!mounted) return;
+    setState(() {
+      _dailyLoading = true;
+      _dailyError = null;
+    });
+    try {
+      final report =
+          await ref.read(employeesServiceProvider).getDailyReport(_day);
+      if (!mounted) return;
+      setState(() => _dailyReport = report);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _dailyError = StringsAr.error);
+    } finally {
+      if (mounted) setState(() => _dailyLoading = false);
+    }
+  }
+
+  void _changeDay(int deltaDays) {
+    setState(() => _day = _day.add(Duration(days: deltaDays)));
+    _loadDaily();
+  }
+
+  bool get _isToday {
+    final t = _todayLocalDate();
+    return _day.year == t.year && _day.month == t.month && _day.day == t.day;
+  }
+
+  String _dayLabel() {
+    if (_isToday) return StringsAr.today;
+    return _dayLabelFormat.format(_day);
+  }
+
+  Future<void> _editDay(DailySalaryRow row) async {
+    final result = await showDaySessionEditDialog(
+      context,
+      employeeName: row.name,
+      day: _day,
+      initialStart: row.start != null
+          ? TimeOfDay.fromDateTime(row.start!.toLocal())
+          : null,
+      initialEnd:
+          row.end != null ? TimeOfDay.fromDateTime(row.end!.toLocal()) : null,
+    );
+    if (result == null) return;
+
+    DateTime? start;
+    DateTime? end;
+    if (!result.cleared) {
+      start = DateTime(_day.year, _day.month, _day.day, result.start!.hour,
+          result.start!.minute);
+      end = DateTime(_day.year, _day.month, _day.day, result.end!.hour,
+          result.end!.minute);
+    }
+
+    try {
+      await ref.read(employeesServiceProvider).updateDaySession(
+            employeeId: row.employeeId,
+            date: _day,
+            start: start,
+            end: end,
+          );
+      // Edits change the underlying sessions, so the weekly report must reload
+      // next time it is shown.
+      _weekLoadedOnce = false;
+      await _loadDaily();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(StringsAr.dayUpdated)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatAppError(e))),
+        );
+      }
+    }
+  }
+
+  void _switchToWeekly() {
+    setState(() => _weeklyView = true);
+    if (!_weekLoadedOnce) _load();
+  }
+
+  void _switchToDaily() {
+    setState(() => _weeklyView = false);
+    _loadDaily();
   }
 
   Future<void> _load() async {
@@ -54,7 +164,10 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
           .read(employeesServiceProvider)
           .getSalaryTable(weekOffset: _offset);
       if (!mounted) return;
-      setState(() => _week = week);
+      setState(() {
+        _week = week;
+        _weekLoadedOnce = true;
+      });
       // Pre-fill the editable total with the computed payable sum.
       _totalController.text = _defaultTotal(week).round().toString();
       _loadRate();
@@ -199,36 +312,266 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
       title: StringsAr.salaryTable,
       body: Column(
         children: [
-          _buildWeekHeader(),
+          _buildModeToggle(),
           Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: _loading
-                  ? const AppLoading(
-                      key: ValueKey('loading'), message: StringsAr.loading)
-                  : KeyedSubtree(
-                      key: const ValueKey('content'),
-                      child: _error != null
-                          ? EmptyState(
-                              icon: Icons.error_outline,
-                              title: _error!,
-                              action: FilledButton(
-                                onPressed: _load,
-                                child: const Text(StringsAr.retry),
-                              ),
-                            )
-                          : (_week == null || _week!.rows.isEmpty)
-                              ? EmptyState(
-                                  icon: Icons.table_chart_outlined,
-                                  title: StringsAr.noEmployees,
-                                )
-                              : _buildTable(),
-                    ),
-            ),
+            child: _weeklyView ? _buildWeeklyBody() : _buildDailyBody(),
           ),
-          if (!_loading && _error == null) _buildPayoutBar(),
         ],
       ),
+    );
+  }
+
+  Widget _buildModeToggle() {
+    Widget tab(String label, IconData icon, bool selected, VoidCallback onTap) {
+      return Expanded(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon,
+                    size: 18,
+                    color: selected ? Colors.white : AppColors.textSecondary),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.w700,
+                    color: selected ? Colors.white : AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          tab(StringsAr.dailyReport, Icons.today_rounded, !_weeklyView,
+              _switchToDaily),
+          tab(StringsAr.weeklyReport, Icons.calendar_month_rounded, _weeklyView,
+              _switchToWeekly),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Daily view
+  // ---------------------------------------------------------------------------
+
+  Widget _buildDailyBody() {
+    return Column(
+      children: [
+        _buildDayHeader(),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _dailyLoading
+                ? const AppLoading(
+                    key: ValueKey('daily-loading'), message: StringsAr.loading)
+                : KeyedSubtree(
+                    key: const ValueKey('daily-content'),
+                    child: _dailyError != null
+                        ? EmptyState(
+                            icon: Icons.error_outline,
+                            title: _dailyError!,
+                            action: FilledButton(
+                              onPressed: _loadDaily,
+                              child: const Text(StringsAr.retry),
+                            ),
+                          )
+                        : (_dailyReport == null || _dailyReport!.rows.isEmpty)
+                            ? EmptyState(
+                                icon: Icons.event_busy_outlined,
+                                title: StringsAr.noEmployees,
+                              )
+                            : _buildDailyList(),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDayHeader() {
+    return Container(
+      color: AppColors.primary.withValues(alpha: 0.06),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: StringsAr.previousDay,
+            icon: const Icon(Icons.chevron_right_rounded),
+            onPressed: () => _changeDay(-1),
+          ),
+          Expanded(
+            child: Text(
+              _dayLabel(),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: StringsAr.nextDay,
+            icon: const Icon(Icons.chevron_left_rounded),
+            // Don't navigate into the future.
+            onPressed: _isToday ? null : () => _changeDay(1),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDailyList() {
+    final rows = _dailyReport!.rows;
+    return RefreshIndicator(
+      onRefresh: _loadDaily,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        itemCount: rows.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (context, index) => _buildDailyCard(rows[index]),
+      ),
+    );
+  }
+
+  Widget _buildDailyCard(DailySalaryRow row) {
+    final hasSession = row.hasSession;
+    final h = row.totalMin ~/ 60;
+    final m = row.totalMin % 60;
+
+    return SectionCard(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: (hasSession ? AppColors.success : AppColors.textMuted)
+                  .withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              hasSession ? Icons.person_rounded : Icons.person_off_outlined,
+              color: hasSession ? AppColors.success : AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  row.name,
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                if (hasSession)
+                  Text(
+                    '${_timeFormat.format(row.start!.toLocal())}  ←  '
+                    '${row.end != null ? _timeFormat.format(row.end!.toLocal()) : StringsAr.working}',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  )
+                else
+                  Text(
+                    StringsAr.absent,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                if (hasSession && row.end != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '${StringsAr.hoursWorked}: ${_numberFormat.format(h)}س ${_numberFormat.format(m)}د'
+                    '${row.overtimeMin > 0 ? '  •  ${StringsAr.overtimeMinutes} ${_numberFormat.format(row.overtimeMin)}' : ''}',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      color: row.overtimeMin > 0
+                          ? AppColors.warning
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: StringsAr.editDay,
+            icon: const Icon(Icons.edit_outlined, color: AppColors.primary),
+            onPressed: () => _editDay(row),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Weekly view
+  // ---------------------------------------------------------------------------
+
+  Widget _buildWeeklyBody() {
+    return Column(
+      children: [
+        _buildWeekHeader(),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _loading
+                ? const AppLoading(
+                    key: ValueKey('loading'), message: StringsAr.loading)
+                : KeyedSubtree(
+                    key: const ValueKey('content'),
+                    child: _error != null
+                        ? EmptyState(
+                            icon: Icons.error_outline,
+                            title: _error!,
+                            action: FilledButton(
+                              onPressed: _load,
+                              child: const Text(StringsAr.retry),
+                            ),
+                          )
+                        : (_week == null || _week!.rows.isEmpty)
+                            ? EmptyState(
+                                icon: Icons.table_chart_outlined,
+                                title: StringsAr.noEmployees,
+                              )
+                            : _buildTable(),
+                  ),
+          ),
+        ),
+        if (!_loading && _error == null) _buildPayoutBar(),
+      ],
     );
   }
 

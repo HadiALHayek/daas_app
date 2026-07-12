@@ -5,6 +5,7 @@ class Employee {
     required this.weeklySalary,
     this.currency = 'SYP',
     this.activeSessionStart,
+    this.weekLoans = 0,
   });
 
   final String id;
@@ -15,6 +16,10 @@ class Employee {
   /// Start time of the currently running attendance session, or null if the
   /// timer is stopped.
   final DateTime? activeSessionStart;
+
+  /// Total loans the employee took during the current week — the amount that
+  /// will be deducted from their upcoming salary.
+  final double weekLoans;
 
   bool get isRunning => activeSessionStart != null;
 
@@ -31,6 +36,7 @@ class Employee {
       activeSessionStart: session is Map && session['start_at'] != null
           ? DateTime.parse(session['start_at'] as String)
           : null,
+      weekLoans: (json['week_loans'] as num?)?.toDouble() ?? 0,
     );
   }
 }
@@ -107,6 +113,69 @@ class SalaryRow {
       loans: (json['loans'] as num?)?.toDouble() ?? 0,
       net: (json['net'] as num?)?.toDouble() ?? 0,
       paid: (json['paid'] as bool?) ?? false,
+    );
+  }
+}
+
+class DailySalaryRow {
+  const DailySalaryRow({
+    required this.employeeId,
+    required this.name,
+    required this.weeklySalary,
+    required this.perMinute,
+    required this.regularMin,
+    required this.overtimeMin,
+    required this.pay,
+    this.start,
+    this.end,
+  });
+
+  final String employeeId;
+  final String name;
+  final double weeklySalary;
+  final double perMinute;
+  final int regularMin;
+  final int overtimeMin;
+  final double pay;
+
+  /// Effective clock-in / clock-out for the day (local via .toLocal()).
+  final DateTime? start;
+  final DateTime? end;
+
+  int get totalMin => regularMin + overtimeMin;
+  bool get hasSession => start != null;
+
+  factory DailySalaryRow.fromJson(Map<String, dynamic> json) {
+    return DailySalaryRow(
+      employeeId: json['employee_id'] as String,
+      name: json['name'] as String,
+      weeklySalary: (json['weekly_salary'] as num?)?.toDouble() ?? 0,
+      perMinute: (json['per_minute'] as num?)?.toDouble() ?? 0,
+      regularMin: (json['regular_min'] as num?)?.toInt() ?? 0,
+      overtimeMin: (json['overtime_min'] as num?)?.toInt() ?? 0,
+      pay: (json['pay'] as num?)?.toDouble() ?? 0,
+      start: json['start_at'] != null
+          ? DateTime.parse(json['start_at'] as String)
+          : null,
+      end: json['end_at'] != null
+          ? DateTime.parse(json['end_at'] as String)
+          : null,
+    );
+  }
+}
+
+class DailySalaryReport {
+  const DailySalaryReport({required this.date, required this.rows});
+
+  final DateTime date;
+  final List<DailySalaryRow> rows;
+
+  factory DailySalaryReport.fromJson(Map<String, dynamic> json) {
+    return DailySalaryReport(
+      date: DateTime.parse(json['day_start'] as String),
+      rows: (json['rows'] as List)
+          .map((e) => DailySalaryRow.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 }

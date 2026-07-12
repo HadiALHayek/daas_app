@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
+import { weekWindow } from "@/lib/salary";
 
 type WorkSessionRow = {
   id: string;
@@ -22,6 +23,24 @@ export async function GET(request: NextRequest) {
 
     if (error) return serverError(error.message);
 
+    // Sum each employee's loans for the current week — this is what will be
+    // deducted from their upcoming salary.
+    const win = weekWindow(0);
+    const { data: loans, error: loanError } = await supabase
+      .from("employee_loans")
+      .select("employee_id, amount")
+      .gte("loan_date", win.startIso)
+      .lt("loan_date", win.endIso);
+    if (loanError) return serverError(loanError.message);
+
+    const weekLoanByEmp = new Map<string, number>();
+    for (const l of loans ?? []) {
+      weekLoanByEmp.set(
+        l.employee_id,
+        (weekLoanByEmp.get(l.employee_id) ?? 0) + Number(l.amount)
+      );
+    }
+
     return Response.json(
       (data ?? []).map((row) => {
         const sessions = (row.work_sessions ?? []) as WorkSessionRow[];
@@ -33,6 +52,7 @@ export async function GET(request: NextRequest) {
           currency: row.currency,
           active: row.active,
           created_at: row.created_at,
+          week_loans: weekLoanByEmp.get(row.id) ?? 0,
           active_session: open
             ? { id: open.id, start_at: open.start_at }
             : null,

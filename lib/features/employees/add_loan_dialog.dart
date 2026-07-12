@@ -9,17 +9,27 @@ class LoanResult {
   final String? note;
 }
 
-/// Dialog to add a loan for an employee. Returns a [LoanResult] on save,
-/// or null if cancelled.
-Future<LoanResult?> showAddLoanDialog(BuildContext context) {
+/// Dialog to add or edit a loan for an employee. Returns a [LoanResult] on
+/// save, or null if cancelled. Pass [initialAmount]/[initialNote] to edit.
+Future<LoanResult?> showAddLoanDialog(
+  BuildContext context, {
+  double? initialAmount,
+  String? initialNote,
+}) {
   return showDialog<LoanResult>(
     context: context,
-    builder: (context) => const _AddLoanDialog(),
+    builder: (context) => _AddLoanDialog(
+      initialAmount: initialAmount,
+      initialNote: initialNote,
+    ),
   );
 }
 
 class _AddLoanDialog extends StatefulWidget {
-  const _AddLoanDialog();
+  const _AddLoanDialog({this.initialAmount, this.initialNote});
+
+  final double? initialAmount;
+  final String? initialNote;
 
   @override
   State<_AddLoanDialog> createState() => _AddLoanDialogState();
@@ -27,8 +37,17 @@ class _AddLoanDialog extends StatefulWidget {
 
 class _AddLoanDialogState extends State<_AddLoanDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _amountController = TextEditingController();
-  final _noteController = TextEditingController();
+  late final _amountController = TextEditingController(
+    text: widget.initialAmount != null
+        ? (widget.initialAmount! % 1 == 0
+            ? widget.initialAmount!.toInt().toString()
+            : widget.initialAmount!.toString())
+        : '',
+  );
+  late final _noteController =
+      TextEditingController(text: widget.initialNote ?? '');
+
+  bool get _isEdit => widget.initialAmount != null;
 
   @override
   void dispose() {
@@ -53,7 +72,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text(StringsAr.addLoan),
+      title: Text(_isEdit ? StringsAr.editLoan : StringsAr.addLoan),
       content: Form(
         key: _formKey,
         child: Column(
