@@ -32,6 +32,11 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
   bool _paying = false;
   bool _weekLoadedOnce = false;
 
+  /// Rounding step (ل.س) applied to each worker's net salary at payout. When
+  /// > 0, each net is rounded UP to the nearest multiple (e.g. step 1000 turns
+  /// 396,336 into 397,000). 0 means no rounding.
+  int _roundStep = 0;
+
   // Daily state.
   late DateTime _day = _todayLocalDate();
   DailySalaryReport? _dailyReport;
@@ -39,6 +44,7 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
   String? _dailyError;
 
   final _totalController = TextEditingController();
+  final _roundController = TextEditingController();
   final _numberFormat = NumberFormat('#,##0', 'ar');
   final _usdFormat = NumberFormat('#,##0.##', 'ar');
   final _dateFormat = DateFormat('yyyy/MM/dd', 'ar');
@@ -59,7 +65,25 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
   @override
   void dispose() {
     _totalController.dispose();
+    _roundController.dispose();
     super.dispose();
+  }
+
+  /// Round [value] UP to the nearest multiple of the active rounding step.
+  double _applyRounding(double value) {
+    if (_roundStep <= 0 || value <= 0) return value;
+    return (value / _roundStep).ceil() * _roundStep.toDouble();
+  }
+
+  void _onRoundChanged(String raw) {
+    final normalized = _normalizeDigits(raw).replaceAll(',', '').trim();
+    final step = int.tryParse(normalized) ?? 0;
+    setState(() => _roundStep = step < 0 ? 0 : step);
+    // Re-fill the payable total to reflect the new rounding.
+    final week = _week;
+    if (week != null) {
+      _totalController.text = _defaultTotal(week).round().toString();
+    }
   }
 
   Future<void> _loadDaily() async {
@@ -144,49 +168,13 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
   }
 
   Future<void> _editDaySalary(DailySalaryRow row) async {
-    final controller =
-        TextEditingController(text: row.pay.round().toString());
     final result = await showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          '${StringsAr.editDailySalary} - ${row.name}',
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[0-9٠-٩۰-۹.,]')),
-          ],
-          decoration: const InputDecoration(
-            labelText: StringsAr.dailySalary,
-            suffixText: StringsAr.syp,
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(StringsAr.cancel),
-          ),
-          FilledButton(
-            onPressed: () {
-              final raw = _normalizeDigits(controller.text)
-                  .replaceAll(',', '')
-                  .replaceAll('٬', '')
-                  .trim();
-              final v = double.tryParse(raw);
-              if (v == null || v < 0) return;
-              Navigator.pop(ctx, v);
-            },
-            child: const Text(StringsAr.save),
-          ),
-        ],
+      builder: (ctx) => _DailySalaryDialog(
+        title: '${StringsAr.editDailySalary} - ${row.name}',
+        initial: row.pay,
       ),
     );
-    controller.dispose();
     if (result == null) return;
 
     try {
@@ -273,8 +261,14 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
     }
   }
 
-  /// Sum of net pay for rows that are payable and not yet paid.
+  /// Sum of payable net pay, with each worker's net rounded up per the active
+  /// rounding step.
   double _defaultTotal(SalaryWeek week) => week.rows
+      .where((r) => !r.paid && r.net > 0)
+      .fold<double>(0, (s, r) => s + _applyRounding(r.net));
+
+  /// Raw (unrounded) sum of payable net pay.
+  double _rawTotal(SalaryWeek week) => week.rows
       .where((r) => !r.paid && r.net > 0)
       .fold<double>(0, (s, r) => s + r.net);
 
@@ -735,6 +729,7 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
     if (week == null || week.rows.isEmpty) return const SizedBox.shrink();
 
     final defaultTotal = _defaultTotal(week);
+    final rawTotal = _rawTotal(week);
     final anyPaid = week.rows.any((r) => r.paid);
 
     // Everything payable is already recorded — show a paid banner + undo.
@@ -786,7 +781,7 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
               ),
               const Spacer(),
               Text(
-                '${_numberFormat.format(defaultTotal)} ${StringsAr.syp}',
+                '${_numberFormat.format(rawTotal)} ${StringsAr.syp}',
                 style: GoogleFonts.cairo(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
@@ -795,6 +790,62 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  StringsAr.roundUpTo,
+                  style: GoogleFonts.cairo(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  controller: _roundController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9٠-٩۰-۹]')),
+                  ],
+                  onChanged: _onRoundChanged,
+                  decoration: const InputDecoration(
+                    hintText: '1000',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_roundStep > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded,
+                    size: 15, color: AppColors.success),
+                const SizedBox(width: 4),
+                Text(
+                  '${StringsAr.afterRounding}: ',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                Text(
+                  '${_numberFormat.format(defaultTotal)} ${StringsAr.syp}',
+                  style: GoogleFonts.cairo(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.success,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -916,7 +967,8 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
     final totalRegular = rows.fold<double>(0, (s, r) => s + r.regularPay);
     final totalOvertime = rows.fold<double>(0, (s, r) => s + r.overtimePay);
     final totalLoans = rows.fold<double>(0, (s, r) => s + r.loans);
-    final totalNet = rows.fold<double>(0, (s, r) => s + r.net);
+    final totalNet =
+        rows.fold<double>(0, (s, r) => s + _applyRounding(r.net));
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -950,7 +1002,8 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
   }
 
   DataRow _dataRow(SalaryRow row) {
-    final negative = row.net < 0;
+    final net = _applyRounding(row.net);
+    final negative = net < 0;
     return DataRow(cells: [
       DataCell(Row(
         mainAxisSize: MainAxisSize.min,
@@ -977,7 +1030,7 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
         ),
       )),
       DataCell(Text(
-        _numberFormat.format(row.net),
+        _numberFormat.format(net),
         style: TextStyle(
           fontWeight: FontWeight.w800,
           color: negative ? AppColors.error : AppColors.success,
@@ -1012,6 +1065,92 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
           _numberFormat.format(net),
           color: net < 0 ? AppColors.error : AppColors.success,
         )),
+      ],
+    );
+  }
+}
+
+/// Small dialog that owns its own [TextEditingController] so it is disposed
+/// safely after the dialog's exit animation completes. Returns the entered
+/// amount, or null if cancelled.
+class _DailySalaryDialog extends StatefulWidget {
+  const _DailySalaryDialog({required this.title, required this.initial});
+
+  final String title;
+  final double initial;
+
+  @override
+  State<_DailySalaryDialog> createState() => _DailySalaryDialogState();
+}
+
+class _DailySalaryDialogState extends State<_DailySalaryDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initial.round().toString());
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _normalizeDigits(String input) {
+    const arabic = '٠١٢٣٤٥٦٧٨٩';
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    final buffer = StringBuffer();
+    for (final ch in input.split('')) {
+      final ai = arabic.indexOf(ch);
+      final fi = persian.indexOf(ch);
+      if (ai != -1) {
+        buffer.write(ai);
+      } else if (fi != -1) {
+        buffer.write(fi);
+      } else {
+        buffer.write(ch);
+      }
+    }
+    return buffer.toString();
+  }
+
+  void _save() {
+    final raw = _normalizeDigits(_controller.text)
+        .replaceAll(',', '')
+        .replaceAll('٬', '')
+        .trim();
+    final value = double.tryParse(raw);
+    if (value == null || value < 0) return;
+    Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        widget.title,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+      ),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9٠-٩۰-۹.,]')),
+        ],
+        onSubmitted: (_) => _save(),
+        decoration: const InputDecoration(
+          labelText: StringsAr.dailySalary,
+          suffixText: StringsAr.syp,
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text(StringsAr.cancel),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text(StringsAr.save),
+        ),
       ],
     );
   }

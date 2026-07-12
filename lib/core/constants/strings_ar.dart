@@ -168,6 +168,8 @@ class StringsAr {
   static const confirmPaySalaries =
       'تسجيل صافي رواتب هذا الأسبوع كمصروفات (بالليرة حسب سعر الصرف اليوم)؟';
   static const totalSalaries = 'إجمالي الرواتب';
+  static const roundUpTo = 'تقريب راتب كل عامل لأقرب (ل.س)';
+  static const afterRounding = 'بعد التقريب';
   static const amountToRecord = 'المبلغ المسجل (ل.س)';
   static const recordSalaries = 'تسجيل كمصروف';
   static const usdEquivalent = 'ما يعادل بالدولار';

@@ -287,12 +287,6 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
       );
       return;
     }
-    if (endOfDay.isAfter(DateTime.now())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(StringsAr.departureInFuture)),
-      );
-      return;
-    }
 
     // Optimistically stop the card.
     setState(() {
@@ -314,7 +308,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     try {
       await ref
           .read(employeesServiceProvider)
-          .stopTimer(employee.id, endAt: endOfDay);
+          .stopTimer(employee.id, endAt: endOfDay, allowFuture: true);
       await _refreshSilently();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

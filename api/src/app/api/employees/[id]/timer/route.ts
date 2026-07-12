@@ -93,14 +93,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Optional manual end (departure) time. Lets the admin backdate the stop
-    // when they forgot to press stop the moment the worker left.
+    // when they forgot to press stop the moment the worker left. When
+    // allow_future is set (e.g. the "finish at 5 PM" button pressed before 5),
+    // a future end time is accepted, capped to one day ahead as a sanity bound.
+    const allowFuture = body?.allow_future === true;
     let endAt = new Date().toISOString();
     if (body?.end_at != null) {
       const parsed = new Date(body.end_at);
       if (Number.isNaN(parsed.getTime())) {
         return badRequest("وقت غير صالح");
       }
-      if (parsed.getTime() > Date.now() + 60_000) {
+      const futureLimit = allowFuture ? 24 * 60 * 60 * 1000 : 60_000;
+      if (parsed.getTime() > Date.now() + futureLimit) {
         return badRequest("وقت الانصراف لا يمكن أن يكون في المستقبل");
       }
       if (parsed.getTime() <= new Date(open.start_at).getTime()) {
