@@ -16,21 +16,119 @@ export type EmployeeWeekRow = {
   comp: SalaryComputation;
 };
 
+type SalaryRateRow = {
+  employee_id: string;
+  weekly_salary: number;
+  effective_from: string;
+};
+
+/**
+ * Record (or update) the weekly salary that applies from [effectiveFrom]
+ * onward. Past weeks keep whatever older rate was already stored.
+ */
+export async function upsertSalaryRate(
+  supabase: SupabaseClient,
+  employeeId: string,
+  weeklySalary: number,
+  effectiveFrom: string
+): Promise<void> {
+  const { error } = await supabase.from("employee_salary_rates").upsert(
+    {
+      employee_id: employeeId,
+      weekly_salary: weeklySalary,
+      effective_from: effectiveFrom,
+    },
+    { onConflict: "employee_id,effective_from" }
+  );
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Pick the weekly salary in effect on [asOfDate] (YYYY-MM-DD): the latest
+ * rate whose effective_from is on or before that date. Falls back to
+ * [fallback] when no history exists yet.
+ */
+export function pickSalaryRate(
+  rates: SalaryRateRow[],
+  employeeId: string,
+  asOfDate: string,
+  fallback: number
+): number {
+  let best: SalaryRateRow | null = null;
+  for (const r of rates) {
+    if (r.employee_id !== employeeId) continue;
+    const from = String(r.effective_from).slice(0, 10);
+    if (from > asOfDate) continue;
+    if (!best || from > String(best.effective_from).slice(0, 10)) best = r;
+  }
+  return best ? Number(best.weekly_salary) : fallback;
+}
+
+async function loadSalaryRates(
+  supabase: SupabaseClient,
+  employeeIds: string[]
+): Promise<SalaryRateRow[]> {
+  if (employeeIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("employee_salary_rates")
+    .select("employee_id, weekly_salary, effective_from")
+    .in("employee_id", employeeIds)
+    .order("effective_from", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as SalaryRateRow[];
+}
+
+/**
+ * Fetch employees for a week: always active ones, plus any inactive workers
+ * who still have sessions / loans / overrides in that window (so soft-deleted
+ * workers keep showing up in historical reports).
+ */
+async function loadEmployeesForWindow(
+  supabase: SupabaseClient,
+  activityIds: Set<string>
+): Promise<
+  { id: string; name: string; weekly_salary: number; currency: string; active: boolean }[]
+> {
+  const { data: active, error: activeError } = await supabase
+    .from("employees")
+    .select("id, name, weekly_salary, currency, active")
+    .eq("active", true)
+    .order("created_at", { ascending: true });
+  if (activeError) throw new Error(activeError.message);
+
+  const byId = new Map(
+    (active ?? []).map((e) => [e.id as string, e])
+  );
+
+  const missing = Array.from(activityIds).filter((id) => !byId.has(id));
+  if (missing.length > 0) {
+    const { data: inactive, error: inactiveError } = await supabase
+      .from("employees")
+      .select("id, name, weekly_salary, currency, active")
+      .in("id", missing);
+    if (inactiveError) throw new Error(inactiveError.message);
+    for (const e of inactive ?? []) byId.set(e.id as string, e);
+  }
+
+  return Array.from(byId.values()).map((e) => ({
+    id: e.id as string,
+    name: e.name as string,
+    weekly_salary: Number(e.weekly_salary),
+    currency: e.currency as string,
+    active: !!e.active,
+  }));
+}
+
 /**
  * Fetch active employees, their sessions overlapping the window, and their
  * loans within the window, and compute each one's salary for that week.
+ * Uses the salary rate that was in effect at the start of the week so editing
+ * a worker's salary later does not rewrite past weeks.
  */
 export async function computeWeekRows(
   supabase: SupabaseClient,
   win: WeekWindow
 ): Promise<EmployeeWeekRow[]> {
-  const { data: employees, error: empError } = await supabase
-    .from("employees")
-    .select("id, name, weekly_salary, currency")
-    .eq("active", true)
-    .order("created_at", { ascending: true });
-  if (empError) throw new Error(empError.message);
-
   const { data: sessions, error: sessError } = await supabase
     .from("work_sessions")
     .select("employee_id, start_at, end_at")
@@ -52,6 +150,17 @@ export async function computeWeekRows(
     .lt("work_date", win.endIso.slice(0, 10));
   if (ovError) throw new Error(ovError.message);
 
+  const activityIds = new Set<string>();
+  for (const s of sessions ?? []) activityIds.add(s.employee_id);
+  for (const l of loans ?? []) activityIds.add(l.employee_id);
+  for (const o of overrides ?? []) activityIds.add(o.employee_id);
+
+  const employees = await loadEmployeesForWindow(supabase, activityIds);
+  const rates = await loadSalaryRates(
+    supabase,
+    employees.map((e) => e.id)
+  );
+
   const sessionsByEmp = new Map<string, WorkSession[]>();
   for (const s of sessions ?? []) {
     const list = sessionsByEmp.get(s.employee_id) ?? [];
@@ -69,24 +178,33 @@ export async function computeWeekRows(
   const overridesByEmp = new Map<string, Map<string, number>>();
   for (const o of overrides ?? []) {
     const map = overridesByEmp.get(o.employee_id) ?? new Map<string, number>();
-    // work_date is a date column; normalize to YYYY-MM-DD.
     map.set(String(o.work_date).slice(0, 10), Number(o.amount));
     overridesByEmp.set(o.employee_id, map);
   }
 
-  return (employees ?? []).map((emp) => ({
-    employeeId: emp.id,
-    name: emp.name,
-    weeklySalary: Number(emp.weekly_salary),
-    currency: emp.currency,
-    comp: computeSalary(
-      Number(emp.weekly_salary),
-      sessionsByEmp.get(emp.id) ?? [],
-      loansByEmp.get(emp.id) ?? [],
-      win,
-      overridesByEmp.get(emp.id)
-    ),
-  }));
+  // Active workers always appear; inactive ones only if they had activity
+  // in this window (soft-deleted workers keep historical rows).
+  return employees.map((emp) => {
+    const weeklySalary = pickSalaryRate(
+      rates,
+      emp.id,
+      win.startDate,
+      emp.weekly_salary
+    );
+    return {
+      employeeId: emp.id,
+      name: emp.name,
+      weeklySalary,
+      currency: emp.currency,
+      comp: computeSalary(
+        weeklySalary,
+        sessionsByEmp.get(emp.id) ?? [],
+        loansByEmp.get(emp.id) ?? [],
+        win,
+        overridesByEmp.get(emp.id)
+      ),
+    };
+  });
 }
 
 /** Current USD→SYP rate from settings (falls back to 15000). */

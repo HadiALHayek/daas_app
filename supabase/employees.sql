@@ -49,6 +49,20 @@ create table if not exists daily_salary_overrides (
 create index if not exists idx_daily_salary_overrides_emp
   on daily_salary_overrides(employee_id, work_date);
 
+-- Historical weekly salary rates. Editing a worker's salary inserts a new row
+-- effective from the current week; past weeks keep the older rate.
+create table if not exists employee_salary_rates (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  weekly_salary numeric not null check (weekly_salary >= 0),
+  effective_from date not null,
+  created_at timestamptz default now(),
+  unique (employee_id, effective_from)
+);
+
+create index if not exists idx_employee_salary_rates_emp
+  on employee_salary_rates(employee_id, effective_from desc);
+
 -- Records a week's salary payout for an employee. Each payout also creates a
 -- matching row in expense_payments (category 'labor') so it shows up as an
 -- expense in the profit report. week_start is the Saturday (local) of the week.

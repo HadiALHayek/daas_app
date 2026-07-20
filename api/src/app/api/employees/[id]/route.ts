@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError, notFound } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
+import { weekWindow } from "@/lib/salary";
+import { upsertSalaryRate } from "@/lib/salary-data";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -38,6 +40,21 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     if (error || !data) return notFound();
 
+    // New salary applies from the start of the current week onward; past weeks
+    // keep the previous rate from employee_salary_rates history.
+    if (weekly_salary != null) {
+      try {
+        await upsertSalaryRate(
+          supabase,
+          id,
+          Number(weekly_salary),
+          weekWindow(0).startDate
+        );
+      } catch (e) {
+        console.error("upsertSalaryRate on update failed", e);
+      }
+    }
+
     return Response.json({
       id: data.id,
       name: data.name,
@@ -59,10 +76,25 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
   try {
     const supabase = getAdminClient();
-    // Sessions and loans cascade via the FK on delete.
-    const { error } = await supabase.from("employees").delete().eq("id", id);
+
+    // Soft-delete: keep the worker row and all historical sessions, loans,
+    // overrides and salary payments. Only hide them from the active list.
+    const nowIso = new Date().toISOString();
+    await supabase
+      .from("work_sessions")
+      .update({ end_at: nowIso })
+      .eq("employee_id", id)
+      .is("end_at", null);
+
+    const { data, error } = await supabase
+      .from("employees")
+      .update({ active: false })
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
 
     if (error) return serverError(error.message);
+    if (!data) return notFound();
 
     return Response.json({ success: true });
   } catch (e) {

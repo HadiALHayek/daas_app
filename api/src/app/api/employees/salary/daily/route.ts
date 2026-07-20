@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
 import { dayWindow, splitSessions, WEEK_MINUTES, WorkSession } from "@/lib/salary";
+import { pickSalaryRate } from "@/lib/salary-data";
 
 /** Local (UTC+3) calendar date string for "today". */
 function todayLocal(): string {
@@ -22,15 +23,9 @@ export async function GET(request: NextRequest) {
   try {
     const dateParam = request.nextUrl.searchParams.get("date");
     const win = dayWindow(dateParam ?? todayLocal());
+    const isToday = win.date === todayLocal();
 
     const supabase = getAdminClient();
-
-    const { data: employees, error: empError } = await supabase
-      .from("employees")
-      .select("id, name, weekly_salary, currency")
-      .eq("active", true)
-      .order("created_at", { ascending: true });
-    if (empError) return serverError(empError.message);
 
     // Sessions that started on this local day.
     const { data: sessions, error: sessError } = await supabase
@@ -51,6 +46,47 @@ export async function GET(request: NextRequest) {
       overrideByEmp.set(o.employee_id, Number(o.amount));
     }
 
+    const activityIds = new Set<string>();
+    for (const s of sessions ?? []) activityIds.add(s.employee_id);
+    for (const o of overrides ?? []) activityIds.add(o.employee_id);
+
+    const { data: active, error: empError } = await supabase
+      .from("employees")
+      .select("id, name, weekly_salary, currency, active")
+      .eq("active", true)
+      .order("created_at", { ascending: true });
+    if (empError) return serverError(empError.message);
+
+    const byId = new Map((active ?? []).map((e) => [e.id as string, e]));
+    const missing = Array.from(activityIds).filter((id) => !byId.has(id));
+    if (missing.length > 0) {
+      const { data: inactive, error: inactiveError } = await supabase
+        .from("employees")
+        .select("id, name, weekly_salary, currency, active")
+        .in("id", missing);
+      if (inactiveError) return serverError(inactiveError.message);
+      for (const e of inactive ?? []) byId.set(e.id as string, e);
+    }
+
+    const employees = Array.from(byId.values()).filter(
+      (e) => e.active || activityIds.has(e.id as string) || isToday
+    );
+
+    const employeeIds = employees.map((e) => e.id as string);
+    let rates: {
+      employee_id: string;
+      weekly_salary: number;
+      effective_from: string;
+    }[] = [];
+    if (employeeIds.length > 0) {
+      const { data: rateRows, error: rateError } = await supabase
+        .from("employee_salary_rates")
+        .select("employee_id, weekly_salary, effective_from")
+        .in("employee_id", employeeIds);
+      if (rateError) return serverError(rateError.message);
+      rates = (rateRows ?? []) as typeof rates;
+    }
+
     const byEmp = new Map<string, WorkSession[]>();
     for (const s of sessions ?? []) {
       const list = byEmp.get(s.employee_id) ?? [];
@@ -58,12 +94,15 @@ export async function GET(request: NextRequest) {
       byEmp.set(s.employee_id, list);
     }
 
-    const rows = (employees ?? []).map((emp) => {
-      const list = byEmp.get(emp.id) ?? [];
-      const perMinute =
-        Number(emp.weekly_salary) > 0
-          ? Number(emp.weekly_salary) / WEEK_MINUTES
-          : 0;
+    const rows = employees.map((emp) => {
+      const list = byEmp.get(emp.id as string) ?? [];
+      const weeklySalary = pickSalaryRate(
+        rates,
+        emp.id as string,
+        win.date,
+        Number(emp.weekly_salary)
+      );
+      const perMinute = weeklySalary > 0 ? weeklySalary / WEEK_MINUTES : 0;
       const { regularMin, overtimeMin } = splitSessions(
         list,
         win.startMs,
@@ -71,11 +110,10 @@ export async function GET(request: NextRequest) {
       );
       const computedPay =
         regularMin * perMinute + overtimeMin * perMinute * 1.5;
-      const override = overrideByEmp.get(emp.id);
+      const override = overrideByEmp.get(emp.id as string);
       const isOverride = override != null;
       const pay = isOverride ? override : computedPay;
 
-      // Effective clock-in/out for display: earliest start, latest end.
       let start: string | null = null;
       let end: string | null = null;
       for (const s of list) {
@@ -86,7 +124,7 @@ export async function GET(request: NextRequest) {
       return {
         employee_id: emp.id,
         name: emp.name,
-        weekly_salary: Number(emp.weekly_salary),
+        weekly_salary: weeklySalary,
         per_minute: perMinute,
         regular_min: regularMin,
         overtime_min: overtimeMin,

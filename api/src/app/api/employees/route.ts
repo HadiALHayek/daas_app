@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
 import { weekWindow } from "@/lib/salary";
+import { upsertSalaryRate } from "@/lib/salary-data";
 
 type WorkSessionRow = {
   id: string;
@@ -91,6 +92,19 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) return serverError(error.message);
+
+    // Seed salary history far in the past so every prior week uses this rate
+    // until the admin changes it (then a new rate starts from the current week).
+    try {
+      await upsertSalaryRate(
+        supabase,
+        data.id,
+        Number(data.weekly_salary),
+        "2000-01-01"
+      );
+    } catch (e) {
+      console.error("upsertSalaryRate on create failed", e);
+    }
 
     return Response.json(
       {

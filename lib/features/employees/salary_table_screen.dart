@@ -32,9 +32,9 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
   bool _paying = false;
   bool _weekLoadedOnce = false;
 
-  /// Rounding step (ل.س) applied to each worker's net salary at payout. When
-  /// > 0, each net is rounded UP to the nearest multiple (e.g. step 1000 turns
-  /// 396,336 into 397,000). 0 means no rounding.
+  /// Rounding step (ل.س) applied to each worker's payout amount. When > 0,
+  /// each amount is rounded to the nearest multiple (below half → down, at or
+  /// above half → up; e.g. step 1000: 396,336 → 396,000, 396,600 → 397,000).
   int _roundStep = 0;
 
   // Daily state.
@@ -69,10 +69,11 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
     super.dispose();
   }
 
-  /// Round [value] UP to the nearest multiple of the active rounding step.
+  /// Round [value] to the nearest multiple of the active step (standard
+  /// rounding: below half → down, at/above half → up). Step 0 = no rounding.
   double _applyRounding(double value) {
     if (_roundStep <= 0 || value <= 0) return value;
-    return (value / _roundStep).ceil() * _roundStep.toDouble();
+    return (value / _roundStep).round() * _roundStep.toDouble();
   }
 
   void _onRoundChanged(String raw) {
@@ -261,16 +262,16 @@ class _SalaryTableScreenState extends ConsumerState<SalaryTableScreen> {
     }
   }
 
-  /// Sum of payable net pay, with each worker's net rounded up per the active
-  /// rounding step.
+  /// Pre-fill for the payout input: sum of net + loans per unpaid worker
+  /// (matches the last two total columns in the table). Table columns unchanged.
   double _defaultTotal(SalaryWeek week) => week.rows
-      .where((r) => !r.paid && r.net > 0)
-      .fold<double>(0, (s, r) => s + _applyRounding(r.net));
+      .where((r) => !r.paid && (r.net + r.loans) > 0)
+      .fold<double>(0, (s, r) => s + _applyRounding(r.net + r.loans));
 
-  /// Raw (unrounded) sum of payable net pay.
+  /// Raw (unrounded) sum of net + loans for unpaid workers.
   double _rawTotal(SalaryWeek week) => week.rows
-      .where((r) => !r.paid && r.net > 0)
-      .fold<double>(0, (s, r) => s + r.net);
+      .where((r) => !r.paid && (r.net + r.loans) > 0)
+      .fold<double>(0, (s, r) => s + r.net + r.loans);
 
   String _normalizeDigits(String input) {
     const arabic = '٠١٢٣٤٥٦٧٨٩';
