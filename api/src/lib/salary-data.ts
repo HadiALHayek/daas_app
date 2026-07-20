@@ -121,9 +121,13 @@ async function loadEmployeesForWindow(
 
 /**
  * Fetch active employees, their sessions overlapping the window, and their
- * loans within the window, and compute each one's salary for that week.
+ * loans for that week, and compute each one's salary.
  * Uses the salary rate that was in effect at the start of the week so editing
  * a worker's salary later does not rewrite past weeks.
+ *
+ * Loans: unsettled loans are deducted on the next payday. Once salaries are
+ * paid for a week, those loans are marked settled for that week — they remain
+ * on that week's report, and the next week starts clear.
  */
 export async function computeWeekRows(
   supabase: SupabaseClient,
@@ -136,12 +140,34 @@ export async function computeWeekRows(
     .gte("end_at", win.startIso);
   if (sessError) throw new Error(sessError.message);
 
-  const { data: loans, error: loanError } = await supabase
-    .from("employee_loans")
-    .select("employee_id, amount, loan_date")
-    .gte("loan_date", win.startIso)
-    .lt("loan_date", win.endIso);
-  if (loanError) throw new Error(loanError.message);
+  // Which employees are already paid for this week?
+  const { data: paidRows, error: paidError } = await supabase
+    .from("salary_payments")
+    .select("employee_id")
+    .eq("week_start", win.startDate);
+  if (paidError) throw new Error(paidError.message);
+  const paidSet = new Set((paidRows ?? []).map((r) => r.employee_id as string));
+  const weekIsPaid = paidSet.size > 0;
+
+  // Paid week → loans settled on this payday (historical).
+  // Unpaid week → all still-open (unsettled) loans that will clear on pay.
+  let loans: { employee_id: string; amount: number; loan_date: string }[] = [];
+  if (weekIsPaid) {
+    const { data, error: loanError } = await supabase
+      .from("employee_loans")
+      .select("employee_id, amount, loan_date")
+      .eq("settled_week_start", win.startDate);
+    if (loanError) throw new Error(loanError.message);
+    loans = data ?? [];
+  } else {
+    const { data, error: loanError } = await supabase
+      .from("employee_loans")
+      .select("employee_id, amount, loan_date")
+      .is("settled_week_start", null)
+      .lt("loan_date", win.endIso);
+    if (loanError) throw new Error(loanError.message);
+    loans = data ?? [];
+  }
 
   const { data: overrides, error: ovError } = await supabase
     .from("daily_salary_overrides")
@@ -152,7 +178,7 @@ export async function computeWeekRows(
 
   const activityIds = new Set<string>();
   for (const s of sessions ?? []) activityIds.add(s.employee_id);
-  for (const l of loans ?? []) activityIds.add(l.employee_id);
+  for (const l of loans) activityIds.add(l.employee_id);
   for (const o of overrides ?? []) activityIds.add(o.employee_id);
 
   const employees = await loadEmployeesForWindow(supabase, activityIds);
@@ -169,11 +195,18 @@ export async function computeWeekRows(
   }
 
   const loansByEmp = new Map<string, LoanRow[]>();
-  for (const l of loans ?? []) {
+  for (const l of loans) {
+    // For an unpaid week that is already partly paid (rare), only attach
+    // unsettled loans to workers who are not yet paid for this week.
+    if (!weekIsPaid && paidSet.has(l.employee_id)) continue;
     const list = loansByEmp.get(l.employee_id) ?? [];
     list.push({ amount: Number(l.amount), loan_date: l.loan_date });
     loansByEmp.set(l.employee_id, list);
   }
+
+  // For a paid week, also show settled loans on workers who appear only via
+  // payments (already in paidSet / activity). For unpaid, unsettled loans may
+  // belong to active workers with no sessions yet — activityIds covers that.
 
   const overridesByEmp = new Map<string, Map<string, number>>();
   for (const o of overrides ?? []) {
@@ -205,6 +238,34 @@ export async function computeWeekRows(
       ),
     };
   });
+}
+
+/** Mark all unsettled loans for [employeeIds] as settled on this payday. */
+export async function settleLoansForWeek(
+  supabase: SupabaseClient,
+  win: WeekWindow,
+  employeeIds: string[]
+): Promise<void> {
+  if (employeeIds.length === 0) return;
+  const { error } = await supabase
+    .from("employee_loans")
+    .update({ settled_week_start: win.startDate })
+    .in("employee_id", employeeIds)
+    .is("settled_week_start", null)
+    .lt("loan_date", win.endIso);
+  if (error) throw new Error(error.message);
+}
+
+/** Undo loan settlement when a week's payout is reversed. */
+export async function unsettleLoansForWeek(
+  supabase: SupabaseClient,
+  win: WeekWindow
+): Promise<void> {
+  const { error } = await supabase
+    .from("employee_loans")
+    .update({ settled_week_start: null })
+    .eq("settled_week_start", win.startDate);
+  if (error) throw new Error(error.message);
 }
 
 /** Current USD→SYP rate from settings (falls back to 15000). */
@@ -301,6 +362,12 @@ export async function payWeek(
       .in("id", insertedIds);
     if (linkError) throw new Error(linkError.message);
 
+    await settleLoansForWeek(
+      supabase,
+      win,
+      payable.map((r) => r.employeeId)
+    );
+
     return { count: insertedIds.length, total: overrideAmount };
   }
 
@@ -353,6 +420,14 @@ export async function payWeek(
       .eq("id", sp.id);
 
     count += 1;
+  }
+
+  if (count > 0) {
+    await settleLoansForWeek(
+      supabase,
+      win,
+      payable.map((r) => r.employeeId)
+    );
   }
 
   return { count, total: computedTotal };

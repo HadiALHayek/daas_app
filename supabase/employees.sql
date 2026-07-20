@@ -21,13 +21,15 @@ create table if not exists work_sessions (
   created_at timestamptz default now()
 );
 
--- Loans given to a worker; deducted from the net salary of the week they fall in.
+-- Loans given to a worker. Unsettled loans are deducted on the next salary
+-- payout; settled_week_start records which payday cleared them (null = open).
 create table if not exists employee_loans (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid not null references employees(id) on delete cascade,
   amount numeric not null check (amount > 0),
   note text,
   loan_date timestamptz not null default now(),
+  settled_week_start date,
   created_at timestamptz default now()
 );
 

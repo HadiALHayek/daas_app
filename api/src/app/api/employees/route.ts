@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
-import { weekWindow } from "@/lib/salary";
 import { upsertSalaryRate } from "@/lib/salary-data";
 
 type WorkSessionRow = {
@@ -24,14 +23,12 @@ export async function GET(request: NextRequest) {
 
     if (error) return serverError(error.message);
 
-    // Sum each employee's loans for the current week — this is what will be
-    // deducted from their upcoming salary.
-    const win = weekWindow(0);
+    // Outstanding (unsettled) loans — cleared on salary payday, so the card
+    // starts each new week at zero after payment.
     const { data: loans, error: loanError } = await supabase
       .from("employee_loans")
       .select("employee_id, amount")
-      .gte("loan_date", win.startIso)
-      .lt("loan_date", win.endIso);
+      .is("settled_week_start", null);
     if (loanError) return serverError(loanError.message);
 
     const weekLoanByEmp = new Map<string, number>();

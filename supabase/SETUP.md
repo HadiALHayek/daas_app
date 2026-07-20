@@ -6,8 +6,9 @@
 4. If you need bill discounts and customer addresses, run [`migration_bill_discount_address.sql`](migration_bill_discount_address.sql).
 5. If the employees module already existed before salary-rate history, run [`migration_employee_salary_rates.sql`](migration_employee_salary_rates.sql) (keeps old salaries when you edit a worker's weekly salary).
 6. If daily salary overrides are needed, run [`migration_daily_salary_overrides.sql`](migration_daily_salary_overrides.sql).
-7. Go to **Authentication → Users** and create one admin user (email + password).
-8. Go to **Project Settings → API** and copy:
+7. To clear worker loans on payday (while keeping them on that week's salary table), run [`migration_loan_settlement.sql`](migration_loan_settlement.sql).
+8. Go to **Authentication → Users** and create one admin user (email + password).
+9. Go to **Project Settings → API** and copy:
    - Project URL → `SUPABASE_URL`
    - `anon` public key → `SUPABASE_ANON_KEY`
    - `service_role` secret key → `SUPABASE_SERVICE_ROLE_KEY` (Vercel only, never in the app)

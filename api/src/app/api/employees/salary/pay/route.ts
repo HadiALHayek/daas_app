@@ -2,7 +2,11 @@ import { NextRequest } from "next/server";
 import { verifyAuth, unauthorized, serverError, badRequest } from "@/lib/auth";
 import { getAdminClient } from "@/lib/supabase";
 import { weekWindow } from "@/lib/salary";
-import { getCurrentRate, payWeek } from "@/lib/salary-data";
+import {
+  getCurrentRate,
+  payWeek,
+  unsettleLoansForWeek,
+} from "@/lib/salary-data";
 
 function readOffset(request: NextRequest, bodyWeek?: unknown): number {
   const q = request.nextUrl.searchParams.get("week");
@@ -89,6 +93,13 @@ export async function DELETE(request: NextRequest) {
       .delete()
       .eq("week_start", win.startDate);
     if (delSpError) return serverError(delSpError.message);
+
+    // Put loans back as unsettled so they show again until the next payout.
+    try {
+      await unsettleLoansForWeek(supabase, win);
+    } catch (e) {
+      console.error("unsettleLoansForWeek failed", e);
+    }
 
     return Response.json({ success: true, removed: rows?.length ?? 0 });
   } catch (e) {
